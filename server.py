@@ -1,0 +1,234 @@
+import wandb
+from typing import List, Dict, Tuple
+import torch.nn.utils.prune as prune
+import numpy as np
+import random
+import os
+from tabulate import tabulate
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.nn import Module
+from util import get_prune_params, super_prune, fed_avg, l1_prune, create_model, copy_model, get_prune_summary
+from util import test as util_test
+from util import *
+from util_dev import *
+
+class Server():
+    """
+        Central Server
+    """
+
+    def __init__(
+        self,
+        args,
+        model,
+        clients,
+        global_test_loader
+    ):
+        super().__init__()
+        self.clients = clients
+        self.num_clients = len(self.clients)
+        self.args = args
+        self.model = model
+        self.init_model = copy_model(model, self.args.device)
+
+        self.curr_prune_step = 0.00
+
+        self.global_test_loader = global_test_loader
+
+    def aggr(
+        self,
+        models,
+        clients,
+        *args,
+        **kwargs
+    ):
+        weights_per_client = np.array(
+            [client.num_data for client in clients], dtype=np.float32)
+        weights_per_client /= np.sum(weights_per_client)
+
+        aggr_model = fed_avg(
+            models=models,
+            weights=weights_per_client,
+            device=self.args.device
+        )
+        pruned_percent = get_prune_summary(aggr_model, name='weight')['global']
+        # pruned by the earlier zeros in the model
+        l1_prune(aggr_model, amount=pruned_percent, name='weight')
+
+        return aggr_model
+
+    def update(
+        self,
+        comm_round,
+        *args,
+        **kwargs
+    ):
+        """
+            Interface to server and clients
+        """
+        print('-----------------------------', flush=True)
+        print(
+            f'| Communication Round: {comm_round}  | ', flush=True)
+        print('-----------------------------', flush=True)
+
+        client_idxs = np.random.choice(
+            self.num_clients, int(
+                self.args.frac_clients_per_round*self.num_clients),
+            replace=False,
+        )
+        clients = [self.clients[i] for i in client_idxs]
+
+        # for the ease of debugging overlapping labels
+        clients.sort(key=lambda x: x.idx)
+
+        # upload model to selected clients
+        self.upload(clients)
+
+        prune_rate = get_prune_summary(model=self.model,
+                                       name='weight')['global']
+        print('Global model prune percentage before starting: {}'.format(prune_rate))
+
+        
+        # call training loop on all clients
+        for client in clients:
+            if self.args.standalone:
+                client.update_standalone()
+            if self.args.fedavg_no_prune:
+                client.update_fedavg_no_prune(comm_round)
+            if self.args.CELL:
+                client.update_CELL(comm_round)
+            if self.args.overlapping_prune:
+                client.update_overlapping_prune(comm_round)
+                
+        
+        if self.args.standalone:
+            import sys
+            sys.exit()
+        
+        # download models from selected clients
+        models, accs, last_local_model_paths = self.download(clients)
+
+        if self.args.CELL:
+            model_type = "ticket"
+        if self.args.fedavg_no_prune or self.args.overlapping_prune:
+            model_type = "local"
+
+        avg_accuracy = np.mean(accs, axis=0, dtype=np.float32)
+        print('-----------------------------', flush=True)
+        print(f'| Average {model_type.title()} Model Accuracy on Local Test Sets: {avg_accuracy}  | ', flush=True)
+        print('-----------------------------', flush=True)
+        wandb.log({f"avg_{model_type}_model_local_acc": avg_accuracy, "comm_round": comm_round})
+
+        # compute average-model
+        aggr_model = self.aggr(models, clients)
+
+        layer_TO_if_pruned = [False]
+        if self.args.overlapping_prune:
+            # get low overlappings
+            prune_percentage, low_mask = calculate_overlapping_ratio("low", last_local_model_paths, percent=1 - self.args.prune_threshold)
+            params_to_prune = get_prune_params_with_layer_name(aggr_model)
+            for params, layer in params_to_prune:
+                layer_low_mask = low_mask[layer]
+                # reverse the mask
+                
+                lowOverlappingPrune(params, layer_low_mask)
+
+            layer_TO_if_pruned = prune_by_low_overlap(aggr_model, low_mask, prune_percentage, self.args.prune_threshold)
+            # log pruned amount of each layer
+            for layer, pruned_amount in prune_percentage.items():
+                print(f"Pruned percentage of {layer}: {pruned_amount:.2%}")
+                wandb.log({f"{layer}_pruned_amount": pruned_amount, "comm_round": comm_round})
+
+        # save global model
+        model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
+        trainable_model_weights = get_trainable_model_weights(aggr_model)
+        with open(f"{model_save_path}/R{comm_round}.pkl", 'wb') as f:
+            pickle.dump(trainable_model_weights, f)
+
+        if not self.args.overlapping_prune:
+            # copy aggregated-model's params to self.model (keep buffer same)
+            source_params = dict(aggr_model.named_parameters())
+            for name, param in self.model.named_parameters():
+                param.data.copy_(source_params[name])
+
+        if self.args.overlapping_prune and True in layer_TO_if_pruned.values():
+            # reinit
+            self.model = aggr_model
+            source_params = dict(self.init_model.named_parameters())
+            for name, param in self.model.named_parameters():
+                param.data.copy_(source_params[name].data)
+
+        # test global model on entire test set
+        global_test_acc = util_test(self.model,
+                               self.global_test_loader,
+                               self.args.device,
+                               self.args.test_verbose)['Accuracy'][0]
+        print('-----------------------------', flush=True)
+        print(f'| Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
+        print('-----------------------------', flush=True)
+        wandb.log({"global_model_global_acc": global_test_acc, "comm_round": comm_round})
+
+        # test global model on each local test set
+        for client in self.clients:
+            global_model_local_set_acc = client.eval(self.model)["Accuracy"][0]
+            wandb.log({f"{client.idx}_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
+
+        # log global model prune percentage
+        if self.args.CELL:
+            global_prune_rate = get_prune_summary(model=self.model,
+                                        name='weight')['global']
+            print(f'Global model prune percentage at the end: {global_prune_rate}')
+            wandb.log({f"global_model_prune_percentage": global_prune_rate, "comm_round": comm_round})
+
+    def download(
+        self,
+        clients,
+        *args,
+        **kwargs
+    ):
+        # downloaded models are non pruned (taken care of in fed-avg)
+        uploads = [client.upload() for client in clients]
+        models = [upload["model"] for upload in uploads]
+        accs = [upload["acc"] for upload in uploads]
+        last_local_model_paths = [upload["last_local_model_path"] for upload in uploads]
+        return models, accs, last_local_model_paths
+
+    def save(
+        self,
+        *args,
+        **kwargs
+    ):
+        # """
+        #     Save model,meta-info,states
+        # """
+        # eval_log_path1 = f"./log/full_save/server/round{self.elapsed_comm_rounds}_model.pickle"
+        # eval_log_path2 = f"./log/full_save/server/round{self.elapsed_comm_rounds}_dict.pickle"
+        # if self.args.report_verbosity:
+        #     log_obj(eval_log_path1, self.model)
+        pass
+
+    def upload(
+        self,
+        clients,
+        *args,
+        **kwargs
+    ) -> None:
+        """
+            Upload global model to clients
+        """
+        for client in clients:
+            # make pruning permanent and then upload the model to clients
+            model_copy = copy_model(self.model, self.args.device)
+            init_model_copy = copy_model(self.init_model, self.args.device)
+
+            params = get_prune_params(model_copy, name='weight')
+            for param, name in params:
+                prune.remove(param, name)
+
+            init_params = get_prune_params(init_model_copy)
+            for param, name in init_params:
+                prune.remove(param, name)
+            # call client method
+            client.download(model_copy, init_model_copy)

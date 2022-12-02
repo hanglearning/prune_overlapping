@@ -1,0 +1,16 @@
+calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2)
+
+poison_model(model, dev_device, noise_variance=1)
+
+debug at the server side before aggr_model generated
+
+Visualization tool
+
+l1_prune(model=model,
+        amount=amount,
+        name='weight',
+        verbose=self.args.prune_verbose)
+
+get_pruned_amount_by_mask(model)
+
+get_pruned_amount_by_weights(model)
