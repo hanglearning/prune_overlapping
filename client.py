@@ -166,7 +166,7 @@ class Client():
         self.train(comm_round)
         local_acc = self.eval(self.model)["Accuracy"][0]
         print(f'Trained local model accuracy: {local_acc}')
-        wandb.log({f"{self.idx}_local_model_local_acc": local_acc, "comm_round": comm_round})
+        
 
         if self.is_malicious:
             # poison the last local model
@@ -176,9 +176,12 @@ class Client():
             # overwrite last local model weights
             self.save_model_weights_to_log(comm_round, self.args.epochs)
 
+        L_or_M = "M" if self.is_malicious else "L"
+
+        wandb.log({f"{L_or_M}_{self.idx}_local_model_local_acc": local_acc, "comm_round": comm_round})
+
         # save last local model
         if self.args.save_local_models:
-            L_or_M = "M" if self.is_malicious else "L"
             model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
             Path(model_save_path).mkdir(parents=True, exist_ok=True)
             torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
