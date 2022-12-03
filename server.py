@@ -176,6 +176,7 @@ class Server():
         # test global model on each local test set
         for client in self.clients:
             global_model_local_set_acc = client.eval(self.model)["Accuracy"][0]
+            print(f"Pruned Global Model on Client {client.id} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
             wandb.log({f"{client.idx}_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
 
         # log global model prune percentage
@@ -191,6 +192,7 @@ class Server():
             source_params = dict(self.init_model.named_parameters())
             for name, param in self.model.named_parameters():
                 param.data.copy_(source_params[name].data)
+            print("Params reinitialized.")
 
     def download(
         self,
