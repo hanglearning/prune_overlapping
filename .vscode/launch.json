@@ -12,7 +12,8 @@
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--seed", "70", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--log_dir", "/Users/chenhang/Documents/Temp", "--epochs", "2", "--n_malicious", "0"]
+            "args": ["--overlapping_prune", "1", "--prune_by_top", "1", "--n_malicious", "0", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "12", "--epochs", "5", "--seed", "40"]
+            // "args": ["--seed", "70", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--log_dir", "/Users/chenhang/Documents/Temp", "--epochs", "2", "--n_malicious", "0"]
         },
         {
             "name": "util_dev.py",
