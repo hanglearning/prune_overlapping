@@ -130,6 +130,7 @@ if __name__ == "__main__":
         # local
         args.log_dir = f"{args.log_dir}/{log_root_name}"
     os.makedirs(args.log_dir)
+    print(f"Model weights saved at {args.log_dir}.")
 
     model_save_path = f"{args.log_dir}/models_weights/globals_0"
     Path(model_save_path).mkdir(parents=True, exist_ok=True)
