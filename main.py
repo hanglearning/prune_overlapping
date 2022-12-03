@@ -72,17 +72,17 @@ if __name__ == "__main__":
     parser.add_argument('--log_dir', type=str, default="./logs")
 
     # Run Type
+    parser.add_argument('--CELL', type=int, default=0)
     parser.add_argument('--standalone', type=int, default=0)
     parser.add_argument('--fedavg_no_prune', type=int, default=0)
 
     # Run Type - overlapping
-    parser.add_argument('--overlapping_prune', type=int, default=1, help='prune based on overlapping ratio')
-    parser.add_argument('--prune_by_top', type=int, default=1, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
+    parser.add_argument('--overlapping_prune', type=int, default=0, help='prune based on overlapping ratio')
+    parser.add_argument('--prune_by_top', type=int, default=0, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
     parser.add_argument('--prune_by_low', type=int, default=0, help='prune based top prune_threshold (target_sparsity) overlapping ratio with l1 pruning')
-    parser.add_argument('--top_overlapping_threshold', type=float, default=0.5, help='how much overlapping region to consider, usually equal to prune_threshold')
+    parser.add_argument('--top_overlapping_threshold', type=float, default=0.5, help='how much overlapping region to consider, usually equal to prune_threshold. CHANGE noise_targeted_percent TOO!')
     
     # for CELL
-    parser.add_argument('--CELL', type=int, default=0)
     parser.add_argument('--eita', type=float, default=0.5,
                         help="accuracy threshold")
     parser.add_argument('--alpha', type=float, default=0.5,
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     # for federated malicious
     parser.add_argument('--noise_variance', type=float, default=1, help="noise variance of the Gaussian Noise by malicious clients")
-    parser.add_argument('--noise_targeted_percent', type=float, default=0.2, help="percent of weights on TOP targeted positions to introduce noise. low positions will be calculated as 1 - noise_targeted_percent")
+    parser.add_argument('--noise_targeted_percent', type=float, default=0.5, help="percent of weights on TOP targeted positions to introduce noise, usually equal to top_overlapping_threshold. low positions will be calculated as 1 - noise_targeted_percent")
     parser.add_argument('--n_malicious', type=int, default=0, help="number of malicious nodes in the network")
 
     # for overlapping prune

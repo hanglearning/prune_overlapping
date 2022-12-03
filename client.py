@@ -314,7 +314,7 @@ class Client():
             self.model = self.global_model
 
         print(f"\nTraining local model")
-        self.train()
+        self.train(comm_round)
 
         ticket_acc = self.eval(self.model)["Accuracy"][0]
         print(f'Trained model accuracy: {ticket_acc}')

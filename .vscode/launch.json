@@ -6,14 +6,31 @@
     "configurations": [
 
         {
-            "name": "main.py",
+            "name": "main.py - TOP",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--overlapping_prune", "1", "--prune_by_top", "1", "--n_malicious", "0", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "12", "--epochs", "5", "--seed", "40"]
-            // "args": ["--seed", "70", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--log_dir", "/Users/chenhang/Documents/Temp", "--epochs", "2", "--n_malicious", "0"]
+            "args": ["--overlapping_prune", "1", "--prune_by_top", "1", "--top_overlapping_threshold", "0.5", "--n_malicious", "0", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "12", "--epochs", "5", "--seed", "40"]
+        },
+        {
+            "name": "main.py - LOW",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--overlapping_prune", "1", "--prune_by_low", "1", "--n_malicious", "0", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--epochs", "2", "--seed", "40"]
+        },
+        {
+            "name": "main.py - CELL",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--CELL", "1", "--num_clients", "12", "--epochs", "5", "--seed", "40", "--wandb_username", "hangchen", "--wandb_project", "Overlapping_Prune_1"]
         },
         {
             "name": "util_dev.py",

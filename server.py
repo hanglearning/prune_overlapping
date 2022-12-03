@@ -53,13 +53,18 @@ class Server():
             weights=weights_per_client,
             device=self.args.device
         )
-        # pruned_percent = get_prune_summary(aggr_model, name='weight')['global']
 
-        # apply mask object to aggr_model. Otherwise won't work in lowOverlappingPrune()
-        l1_prune(model=aggr_model,
-                amount=0.00,
-                name='weight',
-                verbose=False)
+        if self.args.CELL:
+            pruned_percent = get_prune_summary(aggr_model, name='weight')['global']
+            # pruned by the earlier zeros in the model
+            l1_prune(aggr_model, amount=pruned_percent, name='weight')
+
+        if self.args.overlapping_prune:
+            # apply mask object to aggr_model. Otherwise won't work in lowOverlappingPrune()
+            l1_prune(model=aggr_model,
+                    amount=0.00,
+                    name='weight',
+                    verbose=False)
         
         return aggr_model
 
@@ -93,8 +98,8 @@ class Server():
         prune_rate = get_prune_summary(model=self.model,
                                        name='weight')['global']
         print('Global model prune percentage before starting: {}'.format(prune_rate))
+        wandb.log({f"global_model_pruned_percentage_at_the_beginning": prune_rate, "comm_round": comm_round})
 
-        
         # call training loop on all clients
         for client in clients:
             if self.args.standalone:

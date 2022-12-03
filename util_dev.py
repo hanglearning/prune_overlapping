@@ -158,7 +158,10 @@ def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
         for layer, mask in layer_to_mask.items():
             ref_layer_to_mask[layer] *= mask
             # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
-            print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent}")
+            if top_or_low == 'top':
+                print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent}")
+            elif top_or_low == 'low':
+                print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size}")
 
     return ref_layer_to_mask
 
@@ -461,6 +464,7 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
 
 def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_device):
 
+    old_pruning_mask = culc_mask_from_model(model)
     low_mask = calculate_overlapping_mask("low", last_local_model_paths, percent=1 - prune_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
@@ -478,6 +482,7 @@ def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_dev
             layer_TO_if_pruned[layer] = True
             layer_TO_pruned_percentage[layer] = new_pruned_percent
         else:
+            lowOverlappingPrune(params, old_pruning_mask[layer], dev_device)
             layer_TO_if_pruned[layer] = False
             layer_TO_pruned_percentage[layer] = old_pruned_percent
 
@@ -532,6 +537,14 @@ def produce_mask_from_model(model):
                 for pos in layer_to_masked_positions[layer]:
                     mask[pos] = 0
 
+def culc_mask_from_model(model):
+    layer_to_mask = {}
+    for layer, module in model.named_children():
+        for name, weight_params in module.named_parameters():
+            if 'weight' in name:
+                layer_to_mask[layer] = np.ones_like(weight_params)
+                layer_to_mask[weight_params == 0] = 0
+    return layer_to_mask
 
 class LowOverlappingPrune(prune.BasePruningMethod):
     
