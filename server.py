@@ -53,10 +53,14 @@ class Server():
             weights=weights_per_client,
             device=self.args.device
         )
-        pruned_percent = get_prune_summary(aggr_model, name='weight')['global']
-        # pruned by the earlier zeros in the model
-        l1_prune(aggr_model, amount=pruned_percent, name='weight')
+        # pruned_percent = get_prune_summary(aggr_model, name='weight')['global']
 
+        # apply mask object to aggr_model. Otherwise won't work in lowOverlappingPrune()
+        l1_prune(model=aggr_model,
+                amount=0.00,
+                name='weight',
+                verbose=False)
+        
         return aggr_model
 
     def update(
@@ -127,25 +131,18 @@ class Server():
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
             # get low overlappings
-            prune_percentage, low_mask = calculate_overlapping_ratio("low", last_local_model_paths, percent=1 - self.args.prune_threshold)
-            params_to_prune = get_prune_params_with_layer_name(aggr_model)
-            for params, layer in params_to_prune:
-                layer_low_mask = low_mask[layer]
-                # reverse the mask
-                
-                lowOverlappingPrune(params, layer_low_mask)
-
-            layer_TO_if_pruned = prune_by_low_overlap(aggr_model, low_mask, prune_percentage, self.args.prune_threshold)
+            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_low_overlap(aggr_model, last_local_model_paths, self.args.prune_threshold)
             # log pruned amount of each layer
-            for layer, pruned_amount in prune_percentage.items():
-                print(f"Pruned percentage of {layer}: {pruned_amount:.2%}")
-                wandb.log({f"{layer}_pruned_amount": pruned_amount, "comm_round": comm_round})
+            for layer, pruned_percentage in layer_TO_pruned_percentage.items():
+                print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
+                wandb.log({f"{layer}_pruned_percentage": pruned_percentage, "comm_round": comm_round})
 
         # save global model
-        model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
-        trainable_model_weights = get_trainable_model_weights(aggr_model)
-        with open(f"{model_save_path}/R{comm_round}.pkl", 'wb') as f:
-            pickle.dump(trainable_model_weights, f)
+        if self.args.save_global_models:
+            model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
+            trainable_model_weights = get_trainable_model_weights(aggr_model)
+            with open(f"{model_save_path}/R{comm_round}.pkl", 'wb') as f:
+                pickle.dump(trainable_model_weights, f)
 
         if not self.args.overlapping_prune:
             # copy aggregated-model's params to self.model (keep buffer same)

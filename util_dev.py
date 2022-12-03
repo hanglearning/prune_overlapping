@@ -33,7 +33,7 @@ def get_trainable_model_weights(model):
 
 
 
-def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = False):
+def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = False, ignore_pruned = True):
 
     """
         returns 2d mask.
@@ -55,41 +55,43 @@ def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = 
         # take abs as we show magnitude values
         abs_param = np.absolute(param)
 
-        pruned_percent = round(abs_param[abs_param == 0].size/abs_param.size, 1)
+        pruned_percent = abs_param[abs_param == 0].size/abs_param.size
         
         # if need low, this is a trick
-        percent = percent + pruned_percent if top_or_low == 'low' else percent
+        proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
             
-        percent_order = math.ceil(abs_param.size * percent)
+        percent_order = math.ceil(abs_param.size * proxy_percent)
 
         abs_param_1d_array = abs_param.flatten()
         if top_or_low == 'top':
-            percent_threshold = np.partition(abs_param_1d_array, -percent_order)[-percent_order]
+            # percent_threshold = np.partition(abs_param_1d_array, -percent_order)[-percent_order]
+            percent_threshold = -np.sort(-abs_param_1d_array)[percent_order]
         elif top_or_low == 'low':
-            percent_threshold = np.partition(abs_param_1d_array, percent_order - 1)[percent_order - 1]
+            # percent_threshold = np.partition(abs_param_1d_array, percent_order - 1)[percent_order - 1]
+            percent_threshold = np.sort(abs_param_1d_array)[percent_order]
+
 
         mask_2d = np.empty_like(abs_param)
         mask_2d[:] = 0 # initialize as 0
 
         if top_or_low == 'top':
             # change top weights to 1
-            mask_2d[np.where(abs_param >= percent_threshold)] = 1
+            mask_2d[np.where(abs_param > percent_threshold)] = 1
         elif top_or_low == 'low':
-            # change low weights to 1, ingore pruned weights
-            mask_2d[np.where((0 < abs_param) & (abs_param < percent_threshold))] = 1
+            # change low weights to 1
+            if ignore_pruned:
+                mask_2d[np.where((0 < abs_param) & (abs_param < percent_threshold))] = 1
+            else:
+                mask_2d[np.where((0 <= abs_param) & (abs_param < percent_threshold))] = 1
 
         # sanity check
         # one_counts = (mask_2d == 1).sum()
         # print(one_counts/param.size)
 
+        layer_to_mask[layer] = mask_2d
         if keep_sign:
-            # get positive and negative weight positions
-            # maybe try torch.sign(t)
-            positives = (param > 0).astype(int)
-            negatives = (param < 0).astype(int) * -1
-            combined = positives + negatives
+            layer_to_mask[layer] *= np.sign(mask_2d)
 
-        layer_to_mask[layer] = mask_2d * combined
     return layer_to_mask
 
 def generate_1d_magnitude_binary_mask(top_or_low, model_path, percent=0.2):
@@ -111,7 +113,7 @@ def generate_1d_magnitude_binary_mask(top_or_low, model_path, percent=0.2):
         # take abs as we show magnitude values
         param_1d_array = np.absolute(param_1d_array)
 
-        pruned_percent = round(param_1d_array[param_1d_array == 0].size/param_1d_array.size, 1)
+        pruned_percent = param_1d_array[param_1d_array == 0].size/param_1d_array.size
         
         # if need low, this is a trick
         proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
@@ -139,6 +141,21 @@ def generate_1d_magnitude_binary_mask(top_or_low, model_path, percent=0.2):
         layer_to_mask[layer] = mask_1d_array
     return layer_to_mask
 
+def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
+    layer_to_masks = []
+
+    for model_path in model_paths:
+        layer_to_masks.append(generate_2d_magnitude_mask(top_or_low, model_path, percent, keep_sign = False, ignore_pruned = False))
+
+    ref_layer_to_mask = layer_to_masks[0]
+
+    for layer_to_mask in layer_to_masks[1:]:
+        for layer, mask in layer_to_mask.items():
+            ref_layer_to_mask[layer] *= mask
+
+    return ref_layer_to_mask
+
+
 def calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2):
     """
     Args:
@@ -162,9 +179,9 @@ def calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2):
         # print(f"{layer} overlapping ratio: {ratio:.2%}")
         layer_to_overlapping_ratio[layer] = ratio
 
-    return layer_to_overlapping_ratio, ref_layer_to_mask
+    return layer_to_overlapping_ratio
 
-def get_pruned_amount_by_weights(model):
+def get_pruned_percent_by_weights(model):
     total_params_count = get_num_total_model_params(model)
     total_0_count = 0
     total_nan_count = 0
@@ -182,7 +199,7 @@ def get_pruned_amount_by_weights(model):
         sys.exit("nan bug")
     return total_0_count / total_params_count
 
-def get_pruned_amount_by_layer_weights(model):
+def get_pruned_percent_by_layer_weights(model):
     layer_TO_pruned_amount = {}
     for layer, module in model.named_children():
         for name, weight_params in module.named_parameters():
@@ -195,7 +212,7 @@ def get_pruned_amount_by_layer_weights(model):
     return layer_TO_pruned_amount
 
 
-def get_pruned_amount_by_mask(model):
+def get_pruned_percent_by_mask(model):
     total_params_count = get_num_total_model_params(model)
     total_0_count = 0
     for layer, module in model.named_children():
@@ -207,7 +224,14 @@ def get_pruned_amount_by_mask(model):
                     total_0_count += len(list(zip(*np.where(mask == 0))))
     return total_0_count / total_params_count
 
-    
+def get_pruned_percent_by_layer_mask(model):
+    layer_TO_pruned_percent = {}
+    for layer, module in model.named_children():
+        for name, mask in module.named_buffers():
+            if 'mask' in name:
+                layer_TO_pruned_percent[layer] = (mask == 0).sum()/torch.numel(mask)
+    return layer_TO_pruned_percent
+
 
 def get_num_total_model_params(model):
     total_num_model_params = 0
@@ -242,7 +266,7 @@ def global_vs_local_overlapping(log_folder, comm_round, top_or_low, percent=0.2)
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio, _ = calculate_overlapping_ratio(top_or_low, [global_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [global_model_path, epoch_file_path], percent)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
     
@@ -330,7 +354,7 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio, _ = calculate_overlapping_ratio(top_or_low, [ref_local_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [ref_local_model_path, epoch_file_path], percent)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
 
@@ -428,31 +452,31 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
                 params_to_prune.append((module, layer))
     return params_to_prune
 
-def prune_by_low_overlap(model, layer_to_mask, layer_to_pruned_percent, prune_threshold):
-    # consider writing it in CustomPruneMethod(prune.BasePruningMethod)
-    # 1. generate pseudo mask
-    params_to_prune = get_prune_params(model, 'weight')
-    prune.global_unstructured(
-            params_to_prune,
-            pruning_method=prune.L1Unstructured,
-            amount=0)
-    # 2. change mask by applying pruning logic -- THIS AINT WORK
+def prune_by_low_overlap(model, last_local_model_paths, prune_threshold):
+
+    low_mask = calculate_overlapping_mask("low", last_local_model_paths, percent=1 - prune_threshold)
+    params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
-    for layer, module in model.named_children():
-        for name, orig_mask in module.named_buffers():
-            if 'mask' in name:
-                if layer_to_pruned_percent[layer + ".weight_orig"] >= prune_threshold:
-                    layer_TO_if_pruned[layer] = False
-                    continue
-                new_mask = layer_to_mask[layer + ".weight_orig"]
-                if (orig_mask == 0).sum() < (new_mask == 1).sum():
-                    layer_TO_if_pruned[layer] = True
-                    orig_mask = np.ones_like(new_mask)
-                    orig_mask[new_mask == 1] = 0
-                    # (orig_mask == 0).sum()/orig_mask.size; (orig_mask == 0).sum() == (new_mask == 1).sum()
-    return layer_TO_if_pruned
+    layer_TO_pruned_percentage = {}
+    for params, layer in params_to_prune:
+        layer_low_mask = low_mask[layer]
+        # reverse the mask
+        reversed_mask = np.ones_like(layer_low_mask)
+        reversed_mask[layer_low_mask == 1] = 0
+        # determine if prune
+        old_pruned_percent = float((params.weight == 0).sum()/torch.numel(params.weight))
+        new_pruned_percent = float((reversed_mask == 0).sum()/torch.numel(params.weight))
+        if old_pruned_percent != new_pruned_percent and new_pruned_percent < prune_threshold:
+            lowOverlappingPrune(params, reversed_mask)
+            layer_TO_if_pruned[layer] = True
+            layer_TO_pruned_percentage[layer] = new_pruned_percent
+        else:
+            layer_TO_if_pruned[layer] = False
+            layer_TO_pruned_percentage[layer] = old_pruned_percent
+
+    return layer_TO_if_pruned, layer_TO_pruned_percentage
                 
-def produce_mask_from_model(model): # DO NOT USE, may not work
+def produce_mask_from_model(model):
     # use prune with 0 amount to init mask for the model
     # create mask in-place on model
     l1_prune(model=model,
@@ -480,10 +504,10 @@ class LowOverlappingPrune(prune.BasePruningMethod):
     PRUNING_TYPE = 'unstructured'
 
     def __init__(self, layer_new_mask):
-        self.layer_new_mask = layer_new_mask
+        self.layer_new_mask = torch.from_numpy(layer_new_mask)
 
     def compute_mask(self, t, default_mask):
-        return torch.from_numpy(self.layer_new_mask)
+        return torch.flatten(self.layer_new_mask)
 
 def lowOverlappingPrune(module, layer_new_mask, name='weight'):
     LowOverlappingPrune.apply(module, name, layer_new_mask)

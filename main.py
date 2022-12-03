@@ -65,7 +65,7 @@ if __name__ == "__main__":
     parser.add_argument('--prune_verbose', type=bool, default=False)
     parser.add_argument('--seed', type=int, default=40)
     parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--num_workers', type=int, default=0)
+    parser.add_argument('--num_dataloader_workers', type=int, default=0)
     
     
     parser.add_argument('--project_name', type=str, default="dummy")
@@ -94,6 +94,18 @@ if __name__ == "__main__":
     parser.add_argument('--noise_variance', type=float, default=1, help="noise variance of the Gaussian Noise by malicious clients")
     parser.add_argument('--noise_targeted_percent', type=float, default=0.2, help="percent of weights on TOP targeted positions to introduce noise. low positions will be calculated as 1 - noise_targeted_percent")
     parser.add_argument('--n_malicious', type=int, default=0, help="number of malicious nodes in the network")
+
+    # for overlapping prune
+    parser.add_argument('--deterministic_data_shards', type=int, default=0, help="to verify rewarding mechanism based on common labels")
+    # parser.add_argument('--overlapping_prune', type=int, default=1, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
+    # parser.add_argument('--noise_targeted_percent', type=float, default=0.2, help="percent of weights on TOP targeted positions to introduce noise. low positions will be calculated as 1 - noise_targeted_percent")
+
+    # for debug
+    parser.add_argument('--save_data_loaders', type=int, default=0)
+    parser.add_argument('--save_intermediate_models', type=int, default=0)
+    parser.add_argument('--save_local_models', type=int, default=0)
+    parser.add_argument('--save_global_models', type=int, default=0)
+
 
     args = parser.parse_args()
 
@@ -131,7 +143,8 @@ if __name__ == "__main__":
                                               mode=args.dataset_mode,
                                               batch_size=args.batch_size,
                                               rate_unbalance=args.rate_unbalance,
-                                              num_workers=args.num_workers
+                                              num_workers=args.num_dataloader_workers,
+                                              deterministic_sharding=args.deterministic_data_shards
                                               )
     clients = []
     n_malicious = args.n_malicious
@@ -141,8 +154,9 @@ if __name__ == "__main__":
         client = Client(i + 1, args, malicious, train_loaders[i], test_loaders[i], user_labels[i], global_test_loader)
         clients.append(client)
         # save data loader as validation set of the client
-        L_or_M = "M" if malicious else "L"
-        torch.save(train_loaders[i], f"{args.log_dir}/data_loaders/{L_or_M}_{user_labels[i]}_{i+1}.dataloader")
+        if args.save_data_loaders:
+            L_or_M = "M" if malicious else "L"
+            torch.save(train_loaders[i], f"{args.log_dir}/data_loaders/{L_or_M}_{user_labels[i]}_{i+1}.dataloader")
 
     if args.standalone:
         run_name = "STANDALONE" # Pure Centralized

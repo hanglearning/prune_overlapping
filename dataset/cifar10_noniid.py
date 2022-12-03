@@ -2,7 +2,7 @@ import numpy as np
 from torchvision import datasets, transforms
 
 
-def get_dataset_cifar10_extr_noniid(num_users, n_class, nsamples, rate_unbalance, log_dirpath):
+def get_dataset_cifar10_extr_noniid(num_users, n_class, nsamples, rate_unbalance, log_dirpath, deterministic_sharding):
     data_dir = './data'
     apply_transform = transforms.Compose(
         [transforms.ToTensor(),
@@ -15,11 +15,11 @@ def get_dataset_cifar10_extr_noniid(num_users, n_class, nsamples, rate_unbalance
 
     # Chose equal splits for every user
     user_groups_train, user_groups_test, user_groups_labels = cifar_extr_noniid(
-        train_dataset, test_dataset, num_users, n_class, nsamples, rate_unbalance, log_dirpath)
+        train_dataset, test_dataset, num_users, n_class, nsamples, rate_unbalance, log_dirpath, deterministic_sharding)
     return train_dataset, test_dataset, user_groups_train, user_groups_test, user_groups_labels
 
 
-def cifar_extr_noniid(train_dataset, test_dataset, num_users, n_class, num_samples, rate_unbalance, log_dirpath):
+def cifar_extr_noniid(train_dataset, test_dataset, num_users, n_class, num_samples, rate_unbalance, log_dirpath, deterministic_sharding):
     num_shards_train, num_imgs_train = int(50000/num_samples), num_samples
     num_classes = 10
     num_imgs_perc_test, num_imgs_test_total = 1000, 10000
@@ -73,7 +73,7 @@ def cifar_extr_noniid(train_dataset, test_dataset, num_users, n_class, num_sampl
     for i in range(num_users):
         user_labels = np.array([])
         temp_set = list(set(np.random.choice(10, n_class, replace=False)))
-        if i in user_to_labels.keys():
+        if deterministic_sharding and i in user_to_labels.keys():
             temp_set = user_to_labels[i]
         dict_users_labels[i] = temp_set
         rand_set = []

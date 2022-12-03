@@ -95,6 +95,8 @@ class Client():
             print(f"Client {self.idx} poisoned top {percent:.2%} and low {1 - percent:.2%} positions with variance {self.args.noise_variance}.")
 
     def save_model_weights_to_log(self, comm_round, epoch):
+        if not self.args.save_intermediate_models:
+            return
         L_or_M = "M" if self.is_malicious else "L"
         model_save_path = f"{self.args.log_dir}/models_weights/{L_or_M}_{self.user_labels}_{self.idx}"
         Path(model_save_path).mkdir(parents=True, exist_ok=True)
@@ -145,15 +147,14 @@ class Client():
             self.save_model_weights_to_log(comm_round, self.args.epochs)
 
         # save last local model
-        L_or_M = "M" if self.is_malicious else "L"
-        model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
-        Path(model_save_path).mkdir(parents=True, exist_ok=True)
-        torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
+        if self.args.save_local_models:
+            L_or_M = "M" if self.is_malicious else "L"
+            model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
+            Path(model_save_path).mkdir(parents=True, exist_ok=True)
+            torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
 
     def update_overlapping_prune(self, comm_round):
         self.model = self.global_model
-
-        produce_mask_from_model(self.model)
 
         print(f"\n----Client:{self.idx} ({self.user_labels}) Overlapping Pruning Update----")
 
@@ -176,10 +177,11 @@ class Client():
             self.save_model_weights_to_log(comm_round, self.args.epochs)
 
         # save last local model
-        L_or_M = "M" if self.is_malicious else "L"
-        model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
-        Path(model_save_path).mkdir(parents=True, exist_ok=True)
-        torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
+        if self.args.save_local_models:
+            L_or_M = "M" if self.is_malicious else "L"
+            model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
+            Path(model_save_path).mkdir(parents=True, exist_ok=True)
+            torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
 
     
 
