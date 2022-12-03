@@ -95,7 +95,8 @@ class Client():
             print(f"Client {self.idx} poisoned top {percent:.2%} and low {1 - percent:.2%} positions with variance {self.args.noise_variance}.")
 
     def save_model_weights_to_log(self, comm_round, epoch):
-        if not self.args.save_intermediate_models:
+        if not self.args.save_intermediate_models and epoch != self.args.epochs:
+            # always save the last local model weights
             return
         L_or_M = "M" if self.is_malicious else "L"
         model_save_path = f"{self.args.log_dir}/models_weights/{L_or_M}_{self.user_labels}_{self.idx}"
@@ -147,7 +148,7 @@ class Client():
             self.save_model_weights_to_log(comm_round, self.args.epochs)
 
         # save last local model
-        if self.args.save_local_models:
+        if self.args.save_full_local_models:
             L_or_M = "M" if self.is_malicious else "L"
             model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
             Path(model_save_path).mkdir(parents=True, exist_ok=True)
@@ -181,7 +182,7 @@ class Client():
         wandb.log({f"{L_or_M}_{self.idx}_local_model_local_acc": local_acc, "comm_round": comm_round})
 
         # save last local model
-        if self.args.save_local_models:
+        if self.args.save_full_local_models:
             model_save_path = f"{self.args.log_dir}/local_models/R_{comm_round}"
             Path(model_save_path).mkdir(parents=True, exist_ok=True)
             torch.save(self.model, f"{model_save_path}/{L_or_M}_{self.user_labels}_{self.idx}.localmodel")
