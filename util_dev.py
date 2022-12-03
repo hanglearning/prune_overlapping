@@ -543,7 +543,7 @@ def culc_mask_from_model(model, dev_device):
         for name, weight_params in module.named_parameters():
             if 'weight' in name:
                 layer_to_mask[layer] = np.ones_like(weight_params.cpu())
-                layer_to_mask[layer][weight_params == 0] = 0
+                layer_to_mask[layer][weight_params.cpu() == 0] = 0
     return layer_to_mask
 
 class LowOverlappingPrune(prune.BasePruningMethod):
