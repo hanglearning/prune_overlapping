@@ -464,7 +464,7 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
 
 def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_device):
 
-    old_pruning_mask = culc_mask_from_model(model)
+    old_pruning_mask = culc_mask_from_model(model, dev_device)
     low_mask = calculate_overlapping_mask("low", last_local_model_paths, percent=1 - prune_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
@@ -537,13 +537,14 @@ def produce_mask_from_model(model):
                 for pos in layer_to_masked_positions[layer]:
                     mask[pos] = 0
 
-def culc_mask_from_model(model):
+def culc_mask_from_model(model, dev_device):
     layer_to_mask = {}
     for layer, module in model.named_children():
         for name, weight_params in module.named_parameters():
             if 'weight' in name:
                 layer_to_mask[layer] = np.ones_like(weight_params)
-                layer_to_mask[weight_params == 0] = 0
+                layer_to_mask[layer][weight_params == 0] = 0
+                layer_to_mask[layer] = layer_to_mask[layer].to(dev_device)
     return layer_to_mask
 
 class LowOverlappingPrune(prune.BasePruningMethod):
