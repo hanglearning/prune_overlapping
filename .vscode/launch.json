@@ -30,7 +30,7 @@
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--CELL", "1", "--num_clients", "12", "--epochs", "5", "--seed", "40", "--n_malicious", "4", "--noise_variance", "1", "--wandb_username", "hangchen", "--wandb_project", "Overlapping_Prune_1"]
+            "args": ["--CELL", "1", "--num_clients", "12", "--epochs", "5", "--seed", "40", "--n_malicious", "4", "--noise_variance", "1", "--noise_targeted_percent", "1", "--wandb_username", "hangchen", "--wandb_project", "Overlapping_Prune_1"]
         },
         {
             "name": "util_dev.py",

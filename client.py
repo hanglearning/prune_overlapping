@@ -325,6 +325,11 @@ class Client():
         wandb.log(
             {f"{self.idx}_percent_pruned": self.prune_rates[-1]}) # model sparsity at this moment
 
+        if self.is_malicious:
+            # poison the last local model
+            self.poison_model(comm_round, self.args.noise_targeted_percent)
+            poinsoned_acc = self.eval(self.model)["Accuracy"][0]
+            print(f'Poisoned accuracy: {poinsoned_acc}, decreased {ticket_acc - poinsoned_acc}.')
 
     def train(self, comm_round):
         """
