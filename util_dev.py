@@ -493,9 +493,9 @@ def prune_by_top_overlap_l1(model, last_local_model_paths, top_overlapping_thres
     for params, layer in params_to_prune:
         layer_top_mask = top_mask[layer]
         # calculate overlapping ratio
-        overlapping_ratio = (layer_top_mask == 1).sum()/torch.numel(params.weight)
+        overlapping_ratio = round((layer_top_mask == 1).sum()/torch.numel(params.weight), 3)
         # determine if prune
-        old_pruned_percent = float((params.weight == 0).sum()/torch.numel(params.weight))
+        old_pruned_percent = round(float((params.weight == 0).sum()/torch.numel(params.weight)), 3)
         print(f"old_pruned_percent - {layer}", old_pruned_percent)
         print(f"overlapping_ratio - {layer}", overlapping_ratio)
         if old_pruned_percent < prune_threshold:

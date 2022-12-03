@@ -199,6 +199,8 @@ class Server():
             for name, param in self.model.named_parameters():
                 param.data.copy_(source_params[name].data)
             print("Params reinitialized.")
+        else:
+            print("Params NOT reinitialized.")
 
     def download(
         self,

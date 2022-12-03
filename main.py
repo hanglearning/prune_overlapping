@@ -49,7 +49,7 @@ if __name__ == "__main__":
                         default='non-iid', help='non-iid|iid')
     parser.add_argument('--rate_unbalance', type=float, default=1.0)
     parser.add_argument('--num_clients', type=int, default=12)
-    parser.add_argument('--rounds', type=int, default=25)
+    parser.add_argument('--rounds', type=int, default=15)
     parser.add_argument('--prune_step', type=float, default=0.2)
     parser.add_argument('--prune_threshold', type=float, default=0.8)
     parser.add_argument('--frac_clients_per_round', type=float, default=1.0)
