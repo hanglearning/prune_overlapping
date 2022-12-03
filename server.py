@@ -128,6 +128,16 @@ class Server():
         # compute average-model
         aggr_model = self.aggr(models, clients)
 
+        # test global model on entire test set
+        global_test_acc = util_test(aggr_model,
+                               self.global_test_loader,
+                               self.args.device,
+                               self.args.test_verbose)['Accuracy'][0]
+        print('-----------------------------', flush=True)
+        print(f'| Un-pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
+        print('-----------------------------', flush=True)
+        wandb.log({"unpruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
+
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
             if self.args.prune_by_low:
@@ -159,9 +169,9 @@ class Server():
                                self.args.device,
                                self.args.test_verbose)['Accuracy'][0]
         print('-----------------------------', flush=True)
-        print(f'| Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
+        print(f'| Pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
         print('-----------------------------', flush=True)
-        wandb.log({"global_model_global_acc": global_test_acc, "comm_round": comm_round})
+        wandb.log({"pruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
 
         # test global model on each local test set
         for client in self.clients:
