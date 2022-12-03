@@ -153,9 +153,12 @@ def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
 
     ref_layer_to_mask = layer_to_masks[0]
 
-    for layer_to_mask in layer_to_masks[1:]:
+    for layer_to_mask_iter in range(len(layer_to_masks[1:])):
+        layer_to_mask = layer_to_masks[1:][layer_to_mask_iter]
         for layer, mask in layer_to_mask.items():
             ref_layer_to_mask[layer] *= mask
+            # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
+            print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent}")
 
     return ref_layer_to_mask
 
