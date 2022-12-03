@@ -130,8 +130,11 @@ class Server():
 
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
-            # get low overlappings
-            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_low_overlap(aggr_model, last_local_model_paths, self.args.prune_threshold, self.args.device)
+            if self.args.prune_by_low:
+                # get low overlappings
+                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_low_overlap(aggr_model, last_local_model_paths, self.args.prune_threshold, self.args.device)
+            if self.args.prune_by_top:
+                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.prune_threshold)
             # log pruned amount of each layer
             for layer, pruned_percentage in layer_TO_pruned_percentage.items():
                 print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
@@ -149,13 +152,6 @@ class Server():
             source_params = dict(aggr_model.named_parameters())
             for name, param in self.model.named_parameters():
                 param.data.copy_(source_params[name])
-
-        if self.args.overlapping_prune and True in layer_TO_if_pruned.values():
-            # reinit
-            self.model = aggr_model
-            source_params = dict(self.init_model.named_parameters())
-            for name, param in self.model.named_parameters():
-                param.data.copy_(source_params[name].data)
 
         # test global model on entire test set
         global_test_acc = util_test(self.model,
@@ -178,6 +174,13 @@ class Server():
                                         name='weight')['global']
             print(f'Global model prune percentage at the end: {global_prune_rate}')
             wandb.log({f"global_model_prune_percentage": global_prune_rate, "comm_round": comm_round})
+
+        if self.args.overlapping_prune and True in layer_TO_if_pruned.values():
+            # reinit
+            self.model = aggr_model
+            source_params = dict(self.init_model.named_parameters())
+            for name, param in self.model.named_parameters():
+                param.data.copy_(source_params[name].data)
 
     def download(
         self,

@@ -74,7 +74,9 @@ if __name__ == "__main__":
     # Run Type
     parser.add_argument('--standalone', type=int, default=0)
     parser.add_argument('--fedavg_no_prune', type=int, default=0)
-    parser.add_argument('--overlapping_prune', type=int, default=1, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
+    parser.add_argument('--overlapping_prune', type=int, default=1, help='prune based on overlapping ratio')
+    parser.add_argument('--prune_by_top', type=int, default=1, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
+    parser.add_argument('--prune_by_low', type=int, default=0, help='prune based top prune_threshold (target_sparsity) overlapping ratio with l1 pruning')
     
     # for CELL
     parser.add_argument('--CELL', type=int, default=0)
@@ -164,8 +166,10 @@ if __name__ == "__main__":
         run_name = "FEDAVG_NO_PRUNE" # Pure FedAvg without Pruning
     if args.CELL:
         run_name = "CELL"
-    if args.overlapping_prune:
-        run_name = "overlapping_prune"
+    if args.overlapping_prune and args.prune_by_top:
+        run_name = "TOP_OVERLAPPING_PRUNE"
+    if args.overlapping_prune and args.prune_by_low:
+        run_name = "LOW_OVERLAPPING_PRUNE"
     # if args.overlapping:
     #     run_name = "OVERLAPPING"
     # POLL, standalone_poll, standalone_cell, standalone_speed
