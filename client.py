@@ -78,13 +78,13 @@ class Client():
                     if "weight" in name:
                         noise = self.args.noise_variance * torch.randn(weight_params.size())
                         ''' increase magnitude for top positions '''
-                        top_mask = layer_to_top_mask[layer + "." + name]
+                        top_mask = layer_to_top_mask[layer]
                         signed_noise = abs(noise) * top_mask
                         weight_params.add_(signed_noise.to(self.args.device))
                         # sanity check
                         # print((np.array(abs(weight_params) > abs(ori_weight_params)).astype(int) == abs(top_mask)).sum() == top_mask.size)
                         ''' decrease magnitude for low positions '''
-                        low_mask = layer_to_low_mask[layer + "." + name]
+                        low_mask = layer_to_low_mask[layer]
                         # need special dealing with noise to avoid adding magnitude
                         special_noise = np.minimum(abs(noise), abs(weight_params)) * low_mask * -1
                         ori_weight_params = copy.deepcopy(weight_params)

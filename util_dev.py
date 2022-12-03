@@ -452,7 +452,7 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
                 params_to_prune.append((module, layer))
     return params_to_prune
 
-def prune_by_low_overlap(model, last_local_model_paths, prune_threshold):
+def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_device):
 
     low_mask = calculate_overlapping_mask("low", last_local_model_paths, percent=1 - prune_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
@@ -467,7 +467,7 @@ def prune_by_low_overlap(model, last_local_model_paths, prune_threshold):
         old_pruned_percent = float((params.weight == 0).sum()/torch.numel(params.weight))
         new_pruned_percent = float((reversed_mask == 0).sum()/torch.numel(params.weight))
         if old_pruned_percent != new_pruned_percent and new_pruned_percent < prune_threshold:
-            lowOverlappingPrune(params, reversed_mask)
+            lowOverlappingPrune(params, reversed_mask, dev_device)
             layer_TO_if_pruned[layer] = True
             layer_TO_pruned_percentage[layer] = new_pruned_percent
         else:
@@ -504,11 +504,12 @@ class LowOverlappingPrune(prune.BasePruningMethod):
     PRUNING_TYPE = 'unstructured'
 
     def __init__(self, layer_new_mask):
-        self.layer_new_mask = torch.from_numpy(layer_new_mask)
+        self.layer_new_mask = layer_new_mask
 
     def compute_mask(self, t, default_mask):
         return torch.flatten(self.layer_new_mask)
 
-def lowOverlappingPrune(module, layer_new_mask, name='weight'):
+def lowOverlappingPrune(module, layer_new_mask, dev_device, name='weight'):
+    layer_new_mask = torch.from_numpy(layer_new_mask).to(dev_device)
     LowOverlappingPrune.apply(module, name, layer_new_mask)
     return module
