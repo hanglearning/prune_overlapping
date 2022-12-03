@@ -484,9 +484,9 @@ def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_dev
     return layer_TO_if_pruned, layer_TO_pruned_percentage
 
 
-def prune_by_top_overlap_l1(model, last_local_model_paths, prune_threshold):
+def prune_by_top_overlap_l1(model, last_local_model_paths, top_overlapping_threshold, prune_threshold):
 
-    top_mask = calculate_overlapping_mask("top", last_local_model_paths, percent=1 - prune_threshold)
+    top_mask = calculate_overlapping_mask("top", last_local_model_paths, percent=top_overlapping_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
     layer_TO_pruned_percentage = {}

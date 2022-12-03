@@ -74,9 +74,12 @@ if __name__ == "__main__":
     # Run Type
     parser.add_argument('--standalone', type=int, default=0)
     parser.add_argument('--fedavg_no_prune', type=int, default=0)
+
+    # Run Type - overlapping
     parser.add_argument('--overlapping_prune', type=int, default=1, help='prune based on overlapping ratio')
     parser.add_argument('--prune_by_top', type=int, default=1, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
     parser.add_argument('--prune_by_low', type=int, default=0, help='prune based top prune_threshold (target_sparsity) overlapping ratio with l1 pruning')
+    parser.add_argument('--top_overlapping_threshold', type=float, default=0.5, help='how much overlapping region to consider, usually equal to prune_threshold')
     
     # for CELL
     parser.add_argument('--CELL', type=int, default=0)

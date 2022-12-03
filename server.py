@@ -144,7 +144,7 @@ class Server():
                 # get low overlappings
                 layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_low_overlap(aggr_model, last_local_model_paths, self.args.prune_threshold, self.args.device)
             if self.args.prune_by_top:
-                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.prune_threshold)
+                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.top_overlapping_threshold, self.args.prune_threshold)
             # log pruned amount of each layer
             for layer, pruned_percentage in layer_TO_pruned_percentage.items():
                 print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
