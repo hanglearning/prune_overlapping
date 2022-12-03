@@ -67,9 +67,6 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--num_dataloader_workers', type=int, default=0)
     
-    
-    parser.add_argument('--project_name', type=str, default="dummy")
-    parser.add_argument('--run_note', type=str, default="")
 
     parser.add_argument('--save_freq', type=int, default=10)
     parser.add_argument('--log_dir', type=str, default="./logs")
@@ -106,6 +103,9 @@ if __name__ == "__main__":
     parser.add_argument('--save_local_models', type=int, default=0)
     parser.add_argument('--save_global_models', type=int, default=0)
 
+    parser.add_argument('--wandb_username', type=str, default=None)
+    parser.add_argument('--wandb_project', type=str, default="dummy")
+    parser.add_argument('--run_note', type=str, default="")
 
     args = parser.parse_args()
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     # POLL, standalone_poll, standalone_cell, standalone_speed
 
     wandb.login()
-    wandb.init(project=args.project_name, entity="hangchen")
+    wandb.init(project=args.wandb_project, entity=args.wandb_username)
     wandb.run.name = f"{run_name}_samples_{args.n_samples}_n_clients_{args.num_clients}_mali_{args.n_malicious}_optim_{args.optimizer}_seed_{args.seed}_{args.run_note}_{exe_date_time}"
     wandb.config.update(args)
 

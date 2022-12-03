@@ -12,7 +12,7 @@
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--seed", "70", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--log_dir", "/Users/chenhang/Documents/Temp", "--epochs", "2", "--n_malicious", "0"]
+            "args": ["--seed", "70", "--noise_variance", "1", "--noise_targeted_percent", "0.2", "--num_clients", "2", "--log_dir", "/Users/chenhang/Documents/Temp", "--epochs", "10", "--n_malicious", "4"]
         },
         {
             "name": "util_dev.py",
