@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_data_loaders', type=int, default=0)
     parser.add_argument('--save_intermediate_models', type=int, default=0)
     parser.add_argument('--save_full_local_models', type=int, default=0)
-    parser.add_argument('--save_global_models', type=int, default=0)
+    parser.add_argument('--save_global_models', type=int, default=1)
 
     parser.add_argument('--wandb_username', type=str, default=None)
     parser.add_argument('--wandb_project', type=str, default="dummy")
