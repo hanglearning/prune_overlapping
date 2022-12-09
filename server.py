@@ -119,9 +119,9 @@ class Server():
         # download models from selected clients
         models, accs, last_local_model_paths = self.download(clients)
 
-        if self.args.CELL:
+        if self.args.CELL or self.args.overlapping_prune:
             model_type = "ticket"
-        if self.args.fedavg_no_prune or self.args.overlapping_prune:
+        if self.args.fedavg_no_prune:
             model_type = "local"
 
         avg_accuracy = np.mean(accs, axis=0, dtype=np.float32)

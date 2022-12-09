@@ -15,6 +15,9 @@ from util import test as util_test
 
 import ast
 import random
+import os
+from os import listdir
+from os.path import isfile, join
 
 
 def get_trainable_model_weights(model):
@@ -57,8 +60,14 @@ def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = 
 
         pruned_percent = abs_param[abs_param == 0].size/abs_param.size
         
-        # if need low, this is a trick
-        proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
+        # if need low, this is a trick - do not need low any more
+        # proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
+
+        if 1 - pruned_percent < percent:
+            # pruned weights have occupied at least part of the overlapping
+            proxy_percent = 1 - pruned_percent
+        else:
+            proxy_percent = percent
             
         percent_order = math.ceil(abs_param.size * proxy_percent)
 
@@ -116,18 +125,25 @@ def generate_1d_magnitude_binary_mask(top_or_low, model_path, percent=0.2):
 
         # take abs as we show magnitude values
         param_1d_array = np.absolute(param_1d_array)
-
-        pruned_percent = param_1d_array[param_1d_array == 0].size/param_1d_array.size
         
-        # if need low, this is a trick
-        proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
-            
-        percent_order = math.ceil(param_1d_array.size * proxy_percent)
+        pruned_percent = param_1d_array[param_1d_array == 0].size/param_1d_array.size
 
+        # if need low, this is a trick - not need low any more
+        # proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
+
+        if 1 - pruned_percent < percent:
+            # pruned weights have occupied at least part of the overlapping
+            percent_order = param_1d_array.size - param_1d_array[param_1d_array == 0].size - 1
+        else:
+            percent_order = math.ceil(param_1d_array.size * percent)
+            
         if top_or_low == 'top':
-            percent_threshold = np.partition(param_1d_array, -percent_order)[-percent_order]
+            # percent_threshold = np.partition(param_1d_array, -percent_order)[-percent_order]
+            percent_threshold = -np.sort(-param_1d_array)[percent_order]
         elif top_or_low == 'low':
-            percent_threshold = np.partition(param_1d_array, percent_order - 1)[percent_order - 1]
+            # percent_threshold = np.partition(param_1d_array, percent_order - 1)[percent_order - 1]
+            percent_threshold = np.sort(param_1d_array)[percent_order]
+
 
         mask_1d_array = np.empty_like(param_1d_array)
         mask_1d_array[:] = 0 # initialize as 0
@@ -159,9 +175,10 @@ def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
             ref_layer_to_mask[layer] *= mask
             # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
             if top_or_low == 'top':
-                print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent}")
+                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on {top_or_low} {percent:.2%} {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
             elif top_or_low == 'low':
-                print(f"iteration {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size}")
+                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on {top_or_low} {percent:.2%} {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
+        print()
 
     return ref_layer_to_mask
 
@@ -299,18 +316,18 @@ def global_vs_local_overlapping(log_folder, comm_round, top_or_low, percent=0.2)
 
     for layer, clients_to_overlappings in layer_to_clients_to_overlappings.items():
         plt.figure(dpi=250)
-        iteration = 1
+        iter = 1
         for client, overlappings in clients_to_overlappings.items():
             plot_y = [percentage * 100 for percentage in overlappings] # used to format percentage
-            plt.plot(client_to_xticks[client], plot_y, color=colors[iteration - 1])
+            plt.plot(client_to_xticks[client], plot_y, color=colors[iter - 1])
             plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(decimals=2))
             # if client[0] == 'L':
             #     plt.plot(client_to_xticks[client], overlappings, color='green')
             # else:
             #     plt.plot(client_to_xticks[client], overlappings, color='red')
-            plt.annotate(client, xy=(iteration % len(client_to_xticks[client]), plot_y[iteration % len(plot_y)]), size=8, color=colors[iteration - 1])
-            # plt.annotate(client, xy=(len(overlappings) - iteration * 0.8, overlappings[iteration % len(overlappings)]), size=6, color=colors[iteration - 1])
-            iteration += 1
+            plt.annotate(client, xy=(iter % len(client_to_xticks[client]), plot_y[iter % len(plot_y)]), size=8, color=colors[iter - 1])
+            # plt.annotate(client, xy=(len(overlappings) - iter * 0.8, overlappings[iter % len(overlappings)]), size=6, color=colors[iter - 1])
+            iter += 1
 
         patch_B = mpatches.Patch(color='blue', label='BASE [4, 6, 8]')
         patch_3 = mpatches.Patch(color='green', label=f'3 matches')
@@ -374,7 +391,7 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
 
     for layer, clients_to_overlappings in layer_to_clients_to_overlappings.items():
         plt.figure(dpi=250)
-        iteration = 1
+        iter = 1
         for client, overlappings in clients_to_overlappings.items():
             plot_y = [percentage * 100 for percentage in overlappings] # used to format percentage
             client_labels = ast.literal_eval(client.split("_")[1])
@@ -383,8 +400,8 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
                 num_matching_labels = "M"
             plt.plot(client_to_xticks[client], plot_y, color=matching_colors[num_matching_labels])
             plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(decimals=2))
-            plt.annotate(client, xy=(iteration % len(client_to_xticks[client]), plot_y[iteration % len(plot_y)]), size=8, color=matching_colors[num_matching_labels])
-            iteration += 1
+            plt.annotate(client, xy=(iter % len(client_to_xticks[client]), plot_y[iter % len(plot_y)]), size=8, color=matching_colors[num_matching_labels])
+            iter += 1
 
         patch_3 = mpatches.Patch(color=matching_colors[3], label=f'3 matches')
         patch_2 = mpatches.Patch(color=matching_colors[2], label=f'2 matches')
@@ -502,7 +519,7 @@ def prune_by_top_overlap_l1(model, last_local_model_paths, top_overlapping_thres
         # determine if prune
         old_pruned_percent = round(float((params.weight == 0).sum()/torch.numel(params.weight)), 3)
         print(f"old_pruned_percent - {layer}", old_pruned_percent)
-        print(f"overlapping_ratio - {layer}", overlapping_ratio)
+        print(f"overlapping_ratio towards the whole layer - {layer}", overlapping_ratio)
         if old_pruned_percent < prune_threshold:
             new_pruned_percent = min(old_pruned_percent + overlapping_ratio, prune_threshold)
             prune.l1_unstructured(params, 'weight', new_pruned_percent)
@@ -575,3 +592,60 @@ def lowOverlappingPrune(module, layer_new_mask, dev_device, name='weight'):
 #     layer_new_mask = torch.from_numpy(layer_new_mask).to(dev_device)
 #     LowOverlappingPrune.apply(module, name, layer_new_mask)
 #     return module
+
+
+def global_vs_last_local_overlapping(log_folder, top_or_low, last_epoch, percent):
+    """Plot overlapping ratios change through epochs between global model and intermediate local models
+        # rep_device - used as the baseline to determine common labels color
+    """
+    # get all available comm rounds
+    comm_rounds = [int(f.split('.')[0][1:]) for f in listdir(f"{log_folder}/models_weights/globals_0") if isfile(join(f"{log_folder}/models_weights/globals_0", f))]
+    comm_rounds.remove(0)
+    comm_rounds.sort()
+
+    clients = [name for name in os.listdir(f"{log_folder}/models_weights/") if os.path.isdir(os.path.join(f"{log_folder}/models_weights/", name))]
+    clients.sort(key=lambda x: int(x.split('_')[-1]))
+    clients.remove("globals_0")
+
+    ref_global_model = f"{log_folder}/models_weights/globals_0/R0.pkl"
+    # get layers
+    with open(ref_global_model, 'rb') as f:
+        ref_nn_layer_to_weights = pickle.load(f)
+    layers = list(ref_nn_layer_to_weights.keys())
+
+    layer_TO_clients = {l:{c: [] for c in clients} for l in layers}
+
+    for comm_round in comm_rounds:
+
+        global_model_path = f"{log_folder}/models_weights/globals_0/R{comm_round - 1}.pkl"
+        
+        for client in clients:
+            local_model_path = f"{log_folder}/models_weights/{client}/R{comm_round}_E{last_epoch}.pkl"
+            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [global_model_path, local_model_path], percent) # TODO - buggy when percent = 0.5
+            for layer, ratio in layer_to_ratio.items():
+                layer_TO_clients[layer][client].append(ratio)
+
+    for layer, client_to_overlappings in layer_TO_clients.items():
+        plt.figure(dpi=250)
+        for client, overlappings in client_to_overlappings.items():
+            plot_y = [percentage * 100 for percentage in overlappings]
+            color = "green" if client[0] == "L" else "red"
+            plt.plot(comm_rounds, plot_y, color=color)
+            plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(decimals=2))
+    
+        patch_L = mpatches.Patch(color='green', label='Legitimate')
+        patch_M = mpatches.Patch(color='red', label=f'Malicious')
+
+        plt.legend(handles=[patch_L, patch_M], loc='best')
+
+        plt.xlabel('Comm Round')
+        plt.ylabel('Overlapping Ratio')
+        plt.title(f"Global R{comm_round - 1} vs. Local E{last_epoch} - {layer}")
+
+        plot_save_folder = f"{log_folder}/plots/global_local_overlappings/"
+        os.makedirs(plot_save_folder, exist_ok=True)
+
+        plt.savefig(f"{plot_save_folder}/global_vs_local_{layer}.png")
+    
+
+global_vs_last_local_overlapping("/Users/chenhang/Documents/Temp/TOP_0.5_12032022_171052_SEED_40_NOISE_PERCENT_0.5_VAR_1.0", "top", last_epoch = 5, percent=0.5)

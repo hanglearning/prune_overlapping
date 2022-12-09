@@ -71,7 +71,6 @@ class Client():
             print(f"Client {self.idx} poisoned the whole network with variance {self.args.noise_variance}.")
         else:
             layer_to_top_mask = generate_2d_magnitude_mask("top", self.last_local_model_path, percent, keep_sign=True)
-            layer_to_low_mask = generate_2d_magnitude_mask("low", self.last_local_model_path, 1 - percent, keep_sign=True)
             # the client performs targeted noise attack to keep the sign of magnitude
             for layer, module in self.model.named_children():
                 for name, weight_params in module.named_parameters():
@@ -83,20 +82,20 @@ class Client():
                         weight_params.add_(signed_noise.to(self.args.device))
                         # sanity check
                         # print((np.array(abs(weight_params) > abs(ori_weight_params)).astype(int) == abs(top_mask)).sum() == top_mask.size)
-                        ''' decrease magnitude for low positions '''
-                        low_mask = layer_to_low_mask[layer]
+                        ''' decrease magnitude for other positions '''
+                        other_mask = 1 - top_mask
                         # need special dealing with noise to avoid adding magnitude
-                        special_noise = np.minimum(abs(noise), abs(weight_params)) * low_mask * -1
+                        special_noise = np.minimum(abs(noise), abs(weight_params)) * other_mask * -1
                         ori_weight_params = copy.deepcopy(weight_params)
                         weight_params.add_(special_noise.to(self.args.device))
                         # sanity check
-                        # print((np.array(abs(weight_params) < abs(ori_weight_params)).astype(int) == abs(low_mask)).sum() == low_mask.size)
+                        # print((np.array(abs(weight_params) < abs(ori_weight_params)).astype(int) == abs(other_mask)).sum() == other_mask.size)
 
             print(f"Client {self.idx} poisoned top {percent:.2%} and low {1 - percent:.2%} positions with variance {self.args.noise_variance}.")
 
     def save_model_weights_to_log(self, comm_round, epoch):
         if not self.args.save_intermediate_models and epoch != self.args.epochs:
-            # always save the last local model weights
+            # only save the last local model weights
             return
         L_or_M = "M" if self.is_malicious else "L"
         model_save_path = f"{self.args.log_dir}/models_weights/{L_or_M}_{self.user_labels}_{self.idx}"
@@ -176,6 +175,7 @@ class Client():
             print(f'Poisoned accuracy: {poinsoned_acc}, decreased {local_acc - poinsoned_acc}.')
             # overwrite last local model weights
             self.save_model_weights_to_log(comm_round, self.args.epochs)
+            local_acc = poinsoned_acc
 
         L_or_M = "M" if self.is_malicious else "L"
 
