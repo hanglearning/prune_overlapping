@@ -77,10 +77,9 @@ if __name__ == "__main__":
     parser.add_argument('--fedavg_no_prune', type=int, default=0)
 
     # Run Type - overlapping
-    parser.add_argument('--overlapping_prune', type=int, default=0, help='prune based on overlapping ratio')
-    parser.add_argument('--prune_by_top', type=int, default=0, help='prune based low prune_threshold (target_sparsity) overlapping ratio')
-    parser.add_argument('--prune_by_low', type=int, default=0, help='prune based top prune_threshold (target_sparsity) overlapping ratio with l1 pruning')
-    parser.add_argument('--top_overlapping_threshold', type=float, default=0.5, help='how much overlapping region to consider, usually equal to prune_threshold. CHANGE noise_targeted_percent TOO!')
+    parser.add_argument('--overlapping_prune', type=int, default=0, help='prune based on top overlapping ratio')
+    parser.add_argument('--overlapping_threshold', type=float, default=0.5, help='check this percent of top overlapping ragion')
+    parser.add_argument('--check_whole', type=int, default=1, help='check the whole network for overlapping_threshold or unpruned region. checking the whole network makes pruning faster')
     
     # for CELL
     parser.add_argument('--eita', type=float, default=0.5,
@@ -94,7 +93,7 @@ if __name__ == "__main__":
 
     # for federated malicious
     parser.add_argument('--noise_variance', type=float, default=1, help="noise variance of the Gaussian Noise by malicious clients")
-    parser.add_argument('--noise_targeted_percent', type=float, default=0.5, help="percent of weights on TOP targeted positions to introduce noise, usually equal to top_overlapping_threshold. low positions will be calculated as 1 - noise_targeted_percent")
+    parser.add_argument('--noise_targeted_percent', type=float, default=0.5, help="percent of weights on TOP targeted positions to introduce noise, usually equal to overlapping_threshold. low positions will be calculated as 1 - noise_targeted_percent")
     parser.add_argument('--n_malicious', type=int, default=0, help="number of malicious nodes in the network")
 
     # for overlapping prune
@@ -170,10 +169,8 @@ if __name__ == "__main__":
         run_name = "FEDAVG_NO_PRUNE" # Pure FedAvg without Pruning
     if args.CELL:
         run_name = "CELL"
-    if args.overlapping_prune and args.prune_by_top:
-        run_name = "TOP_OVERLAPPING_PRUNE"
-    if args.overlapping_prune and args.prune_by_low:
-        run_name = "LOW_OVERLAPPING_PRUNE"
+    if args.overlapping_prune:
+        run_name = "OVERLAPPING_PRUNE"
     # if args.overlapping:
     #     run_name = "OVERLAPPING"
     # POLL, standalone_poll, standalone_cell, standalone_speed

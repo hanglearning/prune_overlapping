@@ -1,4 +1,4 @@
-calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2)
+calculate_top_overlapping_ratio(model_paths, percent)
 
 poison_model(model, dev_device, noise_variance=1)
 

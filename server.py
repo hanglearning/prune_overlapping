@@ -14,6 +14,8 @@ from util import test as util_test
 from util import *
 from util_dev import *
 
+from sklearn.cluster import KMeans
+
 class Server():
     """
         Central Server
@@ -67,6 +69,16 @@ class Server():
                     verbose=False)
         
         return aggr_model
+
+    # def model_validation(last_global_model, models):
+
+    #     # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
+    #     model_to_overlapping_ratio = 
+    #     kmeans = KMeans(n_clusters=2, random_state=0) 
+    #     kmeans.fit(model_to_overlapping_ratio.reshape(-1,1))
+
+    #     kmeans.labels_
+
 
     def update(
         self,
@@ -130,6 +142,9 @@ class Server():
         print('-----------------------------', flush=True)
         wandb.log({f"avg_{model_type}_model_local_acc": avg_accuracy, "comm_round": comm_round})
 
+        # validation
+
+
         # compute average-model
         aggr_model = self.aggr(models, clients)
 
@@ -145,34 +160,31 @@ class Server():
 
          # test UNpruned global model on each local test set
         for client in self.clients:
-            global_model_local_set_acc = client.eval(self.model)["Accuracy"][0]
+            global_model_local_set_acc = client.eval(aggr_model)["Accuracy"][0]
             print(f"Un-pruned Global Model on Client {client.idx} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
             wandb.log({f"{client.idx}_unpruned_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
 
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
-            if self.args.prune_by_low:
-                # get low overlappings
-                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_low_overlap(aggr_model, last_local_model_paths, self.args.prune_threshold, self.args.device)
-            if self.args.prune_by_top:
-                layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.top_overlapping_threshold, self.args.prune_threshold)
+            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.check_whole, self.args.overlapping_threshold, self.args.prune_threshold)
             # log pruned amount of each layer
             for layer, pruned_percentage in layer_TO_pruned_percentage.items():
                 print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
                 wandb.log({f"{layer}_pruned_percentage": pruned_percentage, "comm_round": comm_round})
 
+        # if not self.args.overlapping_prune:
+        # copy aggregated-model's params to self.model (keep buffer same)
+        # source_params = dict(aggr_model.named_parameters())
+        # for name, param in self.model.named_parameters():
+        #     param.data.copy_(source_params[name])
+        self.model = aggr_model
+
         # save global model
         if self.args.save_global_models:
             model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
-            trainable_model_weights = get_trainable_model_weights(aggr_model)
+            trainable_model_weights = get_trainable_model_weights(self.model)
             with open(f"{model_save_path}/R{comm_round}.pkl", 'wb') as f:
                 pickle.dump(trainable_model_weights, f)
-
-        if not self.args.overlapping_prune:
-            # copy aggregated-model's params to self.model (keep buffer same)
-            source_params = dict(aggr_model.named_parameters())
-            for name, param in self.model.named_parameters():
-                param.data.copy_(source_params[name])
 
         # test PRUNED global model on entire test set
         global_test_acc = util_test(self.model,
@@ -198,8 +210,7 @@ class Server():
             wandb.log({f"global_model_prune_percentage": global_prune_rate, "comm_round": comm_round})
 
         if self.args.overlapping_prune and True in layer_TO_if_pruned.values():
-            # reinit
-            self.model = aggr_model
+            # reinit - check mask
             source_params = dict(self.init_model.named_parameters())
             for name, param in self.model.named_parameters():
                 param.data.copy_(source_params[name].data)

@@ -34,12 +34,62 @@ def get_trainable_model_weights(model):
             layer_to_param[layer_name.split('.')[0]] = param.cpu().detach().numpy()
     return layer_to_param
 
+def check_sparsity_based_on_mask(model):
+    for layer, module in model.named_children():
+        for name, mask in module.named_buffers():
+            if 'mask' in name:
+                print(f"{layer} sparsity - {(mask == 1).sum()/torch.numel(mask)}")
 
+def generate_2d_top_unpruned_magnitude_mask(model_path, percent, keep_sign = False):
 
-def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = False, ignore_pruned = True):
+    layer_to_mask = {}
+
+    with open(model_path, 'rb') as f:
+        nn_layer_to_weights = pickle.load(f)
+            
+    for layer, param in nn_layer_to_weights.items():
+    
+        # take abs as we show magnitude values
+        abs_param = np.absolute(param)
+
+        mask_2d = np.empty_like(abs_param)
+        mask_2d[:] = 0 # initialize as 0
+
+        unpruned_boundary = abs_param.size - abs_param[abs_param == 0].size
+        top_boundary = math.ceil(unpruned_boundary * percent)
+
+        # pruned_percent = pruned_amount/abs_param.size
+
+        # if 1 - pruned_percent < percent:
+        #     # pruned weights have occupied at least part of the overlapping checking region, all unpruned weights will be labeled as 1
+        #     mask_2d[np.where(abs_param != 0)] = 1
+        # else:
+
+        abs_param_1d_array = abs_param.flatten()
+            
+        percent_threshold = -np.sort(-abs_param_1d_array)[top_boundary]
+
+        # change top weights to 1
+        mask_2d[np.where(abs_param > percent_threshold)] = 1
+
+        # sanity check
+        # one_counts = (mask_2d == 1).sum()
+        # print(one_counts/param.size)
+
+        layer_to_mask[layer] = mask_2d
+        if keep_sign:
+            layer_to_mask[layer] *= np.sign(param)
+
+    # sanity check
+    # for layer in layer_to_mask:
+	#     print((layer_to_mask[layer] == 1).sum()/layer_to_mask[layer].size)
+
+    return layer_to_mask
+
+def generate_2d_top_magnitude_mask(model_path, percent, keep_sign = False):
 
     """
-        returns 2d mask.
+        returns 2d top magnitude mask.
         1. keep_sign == True
             it keeps the sign of the original weight. Used in introduce noise. 
             returns mask with -1, 1, 0.
@@ -58,40 +108,24 @@ def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = 
         # take abs as we show magnitude values
         abs_param = np.absolute(param)
 
-        pruned_percent = abs_param[abs_param == 0].size/abs_param.size
-        
-        # if need low, this is a trick - do not need low any more
-        # proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
-
-        if 1 - pruned_percent < percent:
-            # pruned weights have occupied at least part of the overlapping
-            proxy_percent = 1 - pruned_percent
-        else:
-            proxy_percent = percent
-            
-        percent_order = math.ceil(abs_param.size * proxy_percent)
-
-        abs_param_1d_array = abs_param.flatten()
-        if top_or_low == 'top':
-            # percent_threshold = np.partition(abs_param_1d_array, -percent_order)[-percent_order]
-            percent_threshold = -np.sort(-abs_param_1d_array)[percent_order]
-        elif top_or_low == 'low':
-            # percent_threshold = np.partition(abs_param_1d_array, percent_order - 1)[percent_order - 1]
-            percent_threshold = np.sort(abs_param_1d_array)[percent_order]
-
-
         mask_2d = np.empty_like(abs_param)
         mask_2d[:] = 0 # initialize as 0
 
-        if top_or_low == 'top':
-            # change top weights to 1
-            mask_2d[np.where(abs_param > percent_threshold)] = 1
-        elif top_or_low == 'low':
-            # change low weights to 1
-            if ignore_pruned:
-                mask_2d[np.where((0 < abs_param) & (abs_param < percent_threshold))] = 1
-            else:
-                mask_2d[np.where((0 <= abs_param) & (abs_param < percent_threshold))] = 1
+        top_boundary = math.ceil(abs_param.size * percent)
+        
+        # pruned_percent = pruned_amount/abs_param.size
+
+        # if 1 - pruned_percent < percent:
+        #     # pruned weights have occupied at least part of the overlapping checking region, all unpruned weights will be labeled as 1
+        #     mask_2d[np.where(abs_param != 0)] = 1
+        # else:
+
+        abs_param_1d_array = abs_param.flatten()
+            
+        percent_threshold = -np.sort(-abs_param_1d_array)[top_boundary]
+
+        # change top weights to 1
+        mask_2d[np.where(abs_param > percent_threshold)] = 1
 
         # sanity check
         # one_counts = (mask_2d == 1).sum()
@@ -99,7 +133,7 @@ def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = 
 
         layer_to_mask[layer] = mask_2d
         if keep_sign:
-            layer_to_mask[layer] *= np.sign(mask_2d)
+            layer_to_mask[layer] *= np.sign(param)
 
     # sanity check
     # for layer in layer_to_mask:
@@ -107,65 +141,11 @@ def generate_2d_magnitude_mask(top_or_low, model_path, percent=0.2, keep_sign = 
 
     return layer_to_mask
 
-def generate_1d_magnitude_binary_mask(top_or_low, model_path, percent=0.2):
-
-    """
-        returns 1d binary mask. 
-        Compared to generate_2d_magnitude_mask(), this does not keep sign.
-    """
-    
-    layer_to_mask = {}
-
-    with open(model_path, 'rb') as f:
-        nn_layer_to_weights = pickle.load(f)
-            
-    for layer, param in nn_layer_to_weights.items():
-    
-        param_1d_array = param.flatten()
-
-        # take abs as we show magnitude values
-        param_1d_array = np.absolute(param_1d_array)
-        
-        pruned_percent = param_1d_array[param_1d_array == 0].size/param_1d_array.size
-
-        # if need low, this is a trick - not need low any more
-        # proxy_percent = percent + pruned_percent if top_or_low == 'low' else percent
-
-        if 1 - pruned_percent < percent:
-            # pruned weights have occupied at least part of the overlapping
-            percent_order = param_1d_array.size - param_1d_array[param_1d_array == 0].size - 1
-        else:
-            percent_order = math.ceil(param_1d_array.size * percent)
-            
-        if top_or_low == 'top':
-            # percent_threshold = np.partition(param_1d_array, -percent_order)[-percent_order]
-            percent_threshold = -np.sort(-param_1d_array)[percent_order]
-        elif top_or_low == 'low':
-            # percent_threshold = np.partition(param_1d_array, percent_order - 1)[percent_order - 1]
-            percent_threshold = np.sort(param_1d_array)[percent_order]
-
-
-        mask_1d_array = np.empty_like(param_1d_array)
-        mask_1d_array[:] = 0 # initialize as 0
-
-        if top_or_low == 'top':
-            # change top weights to 1
-            mask_1d_array[np.where(param_1d_array >= percent_threshold)] = 1
-        elif top_or_low == 'low':
-            # change low weights to 1, ingore pruned weights
-            mask_1d_array[np.where((0 < param_1d_array) & (param_1d_array < percent_threshold))] = 1
-        # sanity check
-        # one_counts = (mask_1d_array == 1).sum()
-        # print(one_counts/param_1d_array.size)
-
-        layer_to_mask[layer] = mask_1d_array
-    return layer_to_mask
-
-def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
+def calculate_overlapping_mask(model_paths, check_whole, percent):
     layer_to_masks = []
 
     for model_path in model_paths:
-        layer_to_masks.append(generate_2d_magnitude_mask(top_or_low, model_path, percent, keep_sign = False, ignore_pruned = False))
+        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent, check_whole, keep_sign = False))
 
     ref_layer_to_mask = layer_to_masks[0]
 
@@ -174,16 +154,13 @@ def calculate_overlapping_mask(top_or_low, model_paths, percent=0.2):
         for layer, mask in layer_to_mask.items():
             ref_layer_to_mask[layer] *= mask
             # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
-            if top_or_low == 'top':
-                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on {top_or_low} {percent:.2%} {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
-            elif top_or_low == 'low':
-                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on {top_or_low} {percent:.2%} {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
+            print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
         print()
 
     return ref_layer_to_mask
 
 
-def calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2):
+def calculate_top_overlapping_ratio(model_paths, percent):
     """
     Args:
         model_paths - list of model paths
@@ -191,7 +168,8 @@ def calculate_overlapping_ratio(top_or_low, model_paths, percent=0.2):
     layer_to_masks = []
 
     for model_path in model_paths:
-        layer_to_masks.append(generate_1d_magnitude_binary_mask(top_or_low, model_path, percent))
+        # layer_to_masks.append(generate_1d_top_magnitude_binary_mask(model_path, percent))
+        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent))
 
     ref_layer_to_mask = layer_to_masks[0]
 
@@ -268,7 +246,7 @@ def get_num_total_model_params(model):
             total_num_model_params += params.numel()
     return total_num_model_params
 
-def global_vs_local_overlapping(log_folder, comm_round, top_or_low, percent=0.2):
+def global_vs_local_overlapping(log_folder, comm_round, percent):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
@@ -293,7 +271,7 @@ def global_vs_local_overlapping(log_folder, comm_round, top_or_low, percent=0.2)
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [global_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, epoch_file_path], percent)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
     
@@ -348,10 +326,10 @@ def global_vs_local_overlapping(log_folder, comm_round, top_or_low, percent=0.2)
         plt.savefig(f"{plot_save_folder}/global_vs_local_{layer}.png")
 
 
-# global_vs_local_overlapping("/Users/chenhang/Documents/Temp/11282022_143103_SEED_50_NOISE_PERCENT_0.2_VAR_1.0", 1, "top", percent=0.2)
+# global_vs_local_overlapping("/Users/chenhang/Documents/Temp/11282022_143103_SEED_50_NOISE_PERCENT_0.2_VAR_1.0", 1, percent)
 
 
-def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_epoch, top_or_low, percent=0.2, color_M=True):
+def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_epoch, percent, color_M=True):
     """Plot overlapping ratios change through epochs between a client's last local model and other clients' intermediate and last local models.
        See 
         1. if common labels have more overlapping
@@ -381,7 +359,7 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [ref_local_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_top_overlapping_ratio([ref_local_model_path, epoch_file_path], percent)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
 
@@ -420,7 +398,7 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
 
         plt.savefig(f"{plot_save_folder}/{ref_client}_vs_locals_{layer}.png")
 
-# last_local_vs_locals_overlapping("/Users/chenhang/Documents/Temp/11262022_011637_SEED_60_NOISE_1.0", "L_[4, 6, 8]_1", 1, 10, "top", percent=0.2, color_M=False)
+# last_local_vs_locals_overlapping("/Users/chenhang/Documents/Temp/11262022_011637_SEED_60_NOISE_1.0", "L_[4, 6, 8]_1", 1, 10, percent, color_M=False)
 
 
 def test_local_model_acc(validator_ref_client, log_folder, comm_round, color_M=True):
@@ -479,36 +457,9 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
                 params_to_prune.append((module, layer))
     return params_to_prune
 
-def prune_by_low_overlap(model, last_local_model_paths, prune_threshold, dev_device):
+def prune_by_top_overlap_l1(model, last_local_model_paths, check_whole, overlapping_threshold, prune_threshold):
 
-    old_pruning_mask = culc_mask_from_model(model, dev_device)
-    low_mask = calculate_overlapping_mask("low", last_local_model_paths, percent=1 - prune_threshold)
-    params_to_prune = get_prune_params_with_layer_name(model)
-    layer_TO_if_pruned = {}
-    layer_TO_pruned_percentage = {}
-    for params, layer in params_to_prune:
-        layer_low_mask = low_mask[layer]
-        # reverse the mask
-        reversed_mask = np.ones_like(layer_low_mask)
-        reversed_mask[layer_low_mask == 1] = 0
-        # determine if prune
-        old_pruned_percent = float((params.weight == 0).sum()/torch.numel(params.weight))
-        new_pruned_percent = float((reversed_mask == 0).sum()/torch.numel(params.weight))
-        if old_pruned_percent != new_pruned_percent and new_pruned_percent < prune_threshold:
-            lowOverlappingPrune(params, reversed_mask, dev_device)
-            layer_TO_if_pruned[layer] = True
-            layer_TO_pruned_percentage[layer] = new_pruned_percent
-        else:
-            lowOverlappingPrune(params, old_pruning_mask[layer], dev_device)
-            layer_TO_if_pruned[layer] = False
-            layer_TO_pruned_percentage[layer] = old_pruned_percent
-
-    return layer_TO_if_pruned, layer_TO_pruned_percentage
-
-
-def prune_by_top_overlap_l1(model, last_local_model_paths, top_overlapping_threshold, prune_threshold):
-
-    top_mask = calculate_overlapping_mask("top", last_local_model_paths, percent=top_overlapping_threshold)
+    top_mask = calculate_overlapping_mask(last_local_model_paths, check_whole, overlapping_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
     layer_TO_pruned_percentage = {}
@@ -594,7 +545,7 @@ def lowOverlappingPrune(module, layer_new_mask, dev_device, name='weight'):
 #     return module
 
 
-def global_vs_last_local_overlapping(log_folder, top_or_low, last_epoch, percent):
+def global_vs_last_local_overlapping(log_folder, last_epoch, percent):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
@@ -621,7 +572,7 @@ def global_vs_last_local_overlapping(log_folder, top_or_low, last_epoch, percent
         
         for client in clients:
             local_model_path = f"{log_folder}/models_weights/{client}/R{comm_round}_E{last_epoch}.pkl"
-            layer_to_ratio = calculate_overlapping_ratio(top_or_low, [global_model_path, local_model_path], percent) # TODO - buggy when percent = 0.5
+            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, local_model_path], percent) # TODO - buggy when percent = 0.5
             for layer, ratio in layer_to_ratio.items():
                 layer_TO_clients[layer][client].append(ratio)
 
@@ -648,4 +599,4 @@ def global_vs_last_local_overlapping(log_folder, top_or_low, last_epoch, percent
         plt.savefig(f"{plot_save_folder}/global_vs_local_{layer}.png")
     
 
-global_vs_last_local_overlapping("/Users/chenhang/Documents/Temp/TOP_0.5_12032022_171052_SEED_40_NOISE_PERCENT_0.5_VAR_1.0", "top", last_epoch = 5, percent=0.5)
+# global_vs_last_local_overlapping("/Users/chenhang/Documents/Temp/TOP_1.0_12032022_164340_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", last_epoch = 5, percent=0.5)

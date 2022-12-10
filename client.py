@@ -54,7 +54,7 @@ class Client():
 
         self.last_local_model_path = None
 
-    def poison_model(self, comm_round, percent=0.2):
+    def poison_model(self, comm_round, percent):
 
         """ Introduce Gaussian Noise to the model weights
             percent: how much on the TOP positions to introduce noise
@@ -70,7 +70,7 @@ class Client():
                         weight_params.add_(noise.to(self.args.device))
             print(f"Client {self.idx} poisoned the whole network with variance {self.args.noise_variance}.")
         else:
-            layer_to_top_mask = generate_2d_magnitude_mask("top", self.last_local_model_path, percent, keep_sign=True)
+            layer_to_top_mask = generate_2d_top_magnitude_mask(self.last_local_model_path, percent, self.args.check_whole, keep_sign=True)
             # the client performs targeted noise attack to keep the sign of magnitude
             for layer, module in self.model.named_children():
                 for name, weight_params in module.named_parameters():
