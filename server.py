@@ -189,7 +189,7 @@ class Server():
 
         benigh_acc = [idx_to_acc[c] for c in benigh_clients]
         benigh_avg_accuracy = np.mean(benigh_acc, axis=0, dtype=np.float32)
-        all_avg_accuracy = np.mean(idx_to_acc.values(), axis=0, dtype=np.float32)
+        all_avg_accuracy = np.mean(list(idx_to_acc.values()), axis=0, dtype=np.float32)
         print('-----------------------------', flush=True)
         print(f'| Benigh Average {model_type.title()} Model Accuracy on Local Test Sets: {benigh_avg_accuracy}  | ', flush=True)
         print('-----------------------------', flush=True)
