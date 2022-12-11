@@ -184,7 +184,10 @@ class Server():
         for benigh_client in benigh_clients:
             if self.clients[benigh_client - 1].is_malicious:
                 false_positive += 1
-        print(f"{false_positive} in {len(benigh_clients)} out of {len(client_idxs)} is wrong. Error rate - {false_positive/len(client_idxs):.2%}")
+
+        error_rate = false_positive/len(benigh_clients)
+        print(f"{false_positive} in {len(benigh_clients)} out of {len(client_idxs)} is wrong. Error rate - {error_rate:.2%}")
+        wandb.log({f"error_rate": error_rate, "comm_round": comm_round})
 
         benigh_models = [idx_to_model[c] for c in benigh_clients]
         benigh_model_paths = [idx_to_last_local_model_path[c] for c in benigh_clients]
