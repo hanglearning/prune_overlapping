@@ -184,10 +184,10 @@ class Server():
         for benigh_client in benigh_clients:
             if self.clients[benigh_client - 1].is_malicious:
                 false_positive += 1
-        print(f"{false_positive} in {len(benigh_client)} out of {len(client_idxs)} is wrong. Error rate - {false_positive/len(client_idxs):.2%}")
+        print(f"{false_positive} in {len(benigh_clients)} out of {len(client_idxs)} is wrong. Error rate - {false_positive/len(client_idxs):.2%}")
 
         benigh_models = [idx_to_model[c] for c in benigh_clients]
-        benigh_model_paths = [idx_to_model[c] for c in idx_to_last_local_model_path]
+        benigh_model_paths = [idx_to_last_local_model_path[c] for c in benigh_clients]
 
         # compute average-model
         aggr_model = self.aggr(benigh_models, clients)
@@ -210,7 +210,7 @@ class Server():
 
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
-            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, benigh_model_paths.values(), self.args.check_whole, self.args.overlapping_threshold, self.args.prune_threshold)
+            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, benigh_model_paths, self.args.check_whole, self.args.overlapping_threshold, self.args.prune_threshold)
             # log pruned amount of each layer
             for layer, pruned_percentage in layer_TO_pruned_percentage.items():
                 print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
