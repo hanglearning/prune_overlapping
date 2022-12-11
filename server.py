@@ -162,18 +162,7 @@ class Server():
             sys.exit()
         
         # download models from selected clients
-        idx_to_model, accs, idx_to_last_local_model_path = self.download(clients)
-
-        if self.args.CELL or self.args.overlapping_prune:
-            model_type = "ticket"
-        if self.args.fedavg_no_prune:
-            model_type = "local"
-
-        avg_accuracy = np.mean(accs, axis=0, dtype=np.float32)
-        print('-----------------------------', flush=True)
-        print(f'| Average {model_type.title()} Model Accuracy on Local Test Sets: {avg_accuracy}  | ', flush=True)
-        print('-----------------------------', flush=True)
-        wandb.log({f"avg_{model_type}_model_local_acc": avg_accuracy, "comm_round": comm_round})
+        idx_to_model, idx_to_acc, idx_to_last_local_model_path = self.download(clients)
 
         # validation
         benigh_clients = [self.clients[i].idx for i in client_idxs]
@@ -191,6 +180,22 @@ class Server():
 
         benigh_models = [idx_to_model[c] for c in benigh_clients]
         benigh_model_paths = [idx_to_last_local_model_path[c] for c in benigh_clients]
+
+        # log acc
+        if self.args.CELL or self.args.overlapping_prune:
+            model_type = "ticket"
+        if self.args.fedavg_no_prune:
+            model_type = "local"
+
+        benigh_acc = [idx_to_acc[c] for c in benigh_clients]
+        benigh_avg_accuracy = np.mean(benigh_acc, axis=0, dtype=np.float32)
+        all_avg_accuracy = np.mean(idx_to_acc.values(), axis=0, dtype=np.float32)
+        print('-----------------------------', flush=True)
+        print(f'| Benigh Average {model_type.title()} Model Accuracy on Local Test Sets: {benigh_avg_accuracy}  | ', flush=True)
+        print('-----------------------------', flush=True)
+        wandb.log({f"benigh_avg_{model_type}_model_local_acc": benigh_avg_accuracy, "comm_round": comm_round})
+        wandb.log({f"all_avg_{model_type}_model_local_acc": all_avg_accuracy, "comm_round": comm_round})
+
 
         # compute average-model
         aggr_model = self.aggr(benigh_models, clients)
@@ -274,11 +279,11 @@ class Server():
     ):
         # downloaded models are non pruned (taken care of in fed-avg)
         uploads = [client.upload() for client in clients]
-        accs = [upload["acc"] for upload in uploads]
+        idx_to_acc = {upload["idx"]: upload["acc"] for upload in uploads}
         idx_to_model = {upload["idx"]: upload["model"] for upload in uploads}
         idx_to_last_local_model_path = {upload["idx"]: upload["last_local_model_path"] for upload in uploads}
 
-        return idx_to_model, accs, idx_to_last_local_model_path
+        return idx_to_model, idx_to_acc, idx_to_last_local_model_path
 
     def save(
         self,
