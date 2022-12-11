@@ -176,7 +176,7 @@ class Server():
         wandb.log({f"avg_{model_type}_model_local_acc": avg_accuracy, "comm_round": comm_round})
 
         # validation
-        benigh_clients = client_idxs
+        benigh_clients = [self.clients[i].idx for i in client_idxs]
         if self.args.validate:
             benigh_clients = self.model_validation(idx_to_last_local_model_path)
         # evaluate validation
