@@ -25,6 +25,7 @@ class Server():
         self,
         args,
         model,
+        init_global_model_path,
         clients,
         global_test_loader
     ):
@@ -34,6 +35,7 @@ class Server():
         self.args = args
         self.model = model
         self.init_model = copy_model(model, self.args.device)
+        self.last_global_model_path = init_global_model_path
 
         self.curr_prune_step = 0.00
 
@@ -70,15 +72,46 @@ class Server():
         
         return aggr_model
 
-    # def model_validation(last_global_model, models):
+    def model_validation(self, idx_to_last_local_model_path):
+        
+        """
+        Returns:
+            list: a list of client idxes identified as legitimate clients
+        """
 
-    #     # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
-    #     model_to_overlapping_ratio = 
-    #     kmeans = KMeans(n_clusters=2, random_state=0) 
-    #     kmeans.fit(model_to_overlapping_ratio.reshape(-1,1))
+        # get layers
+        with open(self.last_global_model_path, 'rb') as f:
+            layer_to_weights = pickle.load(f)
+        layers = list(layer_to_weights.keys())
+        num_layers = len(layers)
 
-    #     kmeans.labels_
+        # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
+        layer_to_ratios = {l:[] for l in layers} # in the order of client
+        client_to_points = {}
+        for client_idx, local_model_path in idx_to_last_local_model_path.items():
+            layer_to_mask = calculate_overlapping_mask([self.last_global_model_path, local_model_path], self.args.check_whole, self.args.overlapping_threshold)
+            for layer, mask in layer_to_mask.items():
+                overlapping_ratio = round((mask == 1).sum()/mask.size, 3)
+                layer_to_ratios[layer].append(overlapping_ratio)
+            client_to_points[client_idx] = 0
 
+        # group clients based on ratio
+        kmeans = KMeans(n_clusters=2, random_state=0) 
+        for layer, ratios in layer_to_ratios.items():
+            group_0 = []
+            group_1 = []
+            kmeans.fit(np.array(ratios).reshape(-1,1))
+            for client_iter in range(len(kmeans.labels_)):
+                label = kmeans.labels_[client_iter]
+                if label == 0:
+                    group_0.append(client_iter)
+                else:
+                    group_1.append(client_iter)
+            benigh_group = group_0 if len(group_0) >= len(group_1) else group_1
+            for client_iter in benigh_group:
+                client_to_points[client_iter + 1] += 1
+        
+        return [client_idx for client_idx in client_to_points if client_to_points[client_idx] >= num_layers * 0.5]
 
     def update(
         self,
@@ -107,10 +140,10 @@ class Server():
         # upload model to selected clients
         self.upload(clients)
 
-        prune_rate = get_prune_summary(model=self.model,
+        global_prune_perc = get_prune_summary(model=self.model,
                                        name='weight')['global']
-        print('Global model prune percentage before starting: {}'.format(prune_rate))
-        wandb.log({f"global_model_pruned_percentage_at_the_beginning": prune_rate, "comm_round": comm_round})
+        print('Global model prune percentage before starting: {}'.format(global_prune_perc))
+        wandb.log({f"global_model_pruned_percentage_at_the_beginning": global_prune_perc, "comm_round": comm_round})
 
         # call training loop on all clients
         for client in clients:
@@ -129,7 +162,7 @@ class Server():
             sys.exit()
         
         # download models from selected clients
-        models, accs, last_local_model_paths = self.download(clients)
+        idx_to_model, accs, idx_to_last_local_model_path = self.download(clients)
 
         if self.args.CELL or self.args.overlapping_prune:
             model_type = "ticket"
@@ -143,10 +176,14 @@ class Server():
         wandb.log({f"avg_{model_type}_model_local_acc": avg_accuracy, "comm_round": comm_round})
 
         # validation
-
+        benigh_clients = client_idxs
+        if self.ages.validate:
+            benigh_clients = self.model_validation(idx_to_last_local_model_path)
+        benigh_models = [idx_to_model[c] for c in benigh_clients]
+        benigh_model_paths = [idx_to_model[c] for c in idx_to_last_local_model_path]
 
         # compute average-model
-        aggr_model = self.aggr(models, clients)
+        aggr_model = self.aggr(benigh_models, clients)
 
         # test UNpruned global model on entire test set
         global_test_acc = util_test(aggr_model,
@@ -166,7 +203,7 @@ class Server():
 
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
-            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, last_local_model_paths, self.args.check_whole, self.args.overlapping_threshold, self.args.prune_threshold)
+            layer_TO_if_pruned, layer_TO_pruned_percentage = prune_by_top_overlap_l1(aggr_model, benigh_model_paths.values(), self.args.check_whole, self.args.overlapping_threshold, self.args.prune_threshold)
             # log pruned amount of each layer
             for layer, pruned_percentage in layer_TO_pruned_percentage.items():
                 print(f"Pruned percentage of {layer}: {pruned_percentage:.2%}")
@@ -183,7 +220,8 @@ class Server():
         if self.args.save_global_models:
             model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
             trainable_model_weights = get_trainable_model_weights(self.model)
-            with open(f"{model_save_path}/R{comm_round}.pkl", 'wb') as f:
+            self.last_global_model_path = f"{model_save_path}/R{comm_round}.pkl"
+            with open(self.last_global_model_path, 'wb') as f:
                 pickle.dump(trainable_model_weights, f)
 
         # test PRUNED global model on entire test set
@@ -204,10 +242,10 @@ class Server():
 
         # log global model prune percentage
         if self.args.CELL:
-            global_prune_rate = get_prune_summary(model=self.model,
+            global_global_prune_perc = get_prune_summary(model=self.model,
                                         name='weight')['global']
-            print(f'Global model prune percentage at the end: {global_prune_rate}')
-            wandb.log({f"global_model_prune_percentage": global_prune_rate, "comm_round": comm_round})
+            print(f'Global model prune percentage at the end: {global_global_prune_perc}')
+            wandb.log({f"global_model_prune_percentage": global_global_prune_perc, "comm_round": comm_round})
 
         if self.args.overlapping_prune and True in layer_TO_if_pruned.values():
             # reinit - check mask
@@ -226,10 +264,11 @@ class Server():
     ):
         # downloaded models are non pruned (taken care of in fed-avg)
         uploads = [client.upload() for client in clients]
-        models = [upload["model"] for upload in uploads]
         accs = [upload["acc"] for upload in uploads]
-        last_local_model_paths = [upload["last_local_model_path"] for upload in uploads]
-        return models, accs, last_local_model_paths
+        idx_to_model = {upload["idx"]: upload["model"] for upload in uploads}
+        idx_to_last_local_model_path = {upload["idx"]: upload["last_local_model_path"] for upload in uploads}
+
+        return idx_to_model, accs, idx_to_last_local_model_path
 
     def save(
         self,

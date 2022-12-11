@@ -402,5 +402,6 @@ class Client():
         return {
             'model': upload_model,
             'last_local_model_path': self.last_local_model_path,
-            'acc': self.accuracies[-1]
+            'acc': self.accuracies[-1],
+            'idx': self.idx
         }

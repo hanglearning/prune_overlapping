@@ -40,53 +40,7 @@ def check_sparsity_based_on_mask(model):
             if 'mask' in name:
                 print(f"{layer} sparsity - {(mask == 1).sum()/torch.numel(mask)}")
 
-def generate_2d_top_unpruned_magnitude_mask(model_path, percent, keep_sign = False):
-
-    layer_to_mask = {}
-
-    with open(model_path, 'rb') as f:
-        nn_layer_to_weights = pickle.load(f)
-            
-    for layer, param in nn_layer_to_weights.items():
-    
-        # take abs as we show magnitude values
-        abs_param = np.absolute(param)
-
-        mask_2d = np.empty_like(abs_param)
-        mask_2d[:] = 0 # initialize as 0
-
-        unpruned_boundary = abs_param.size - abs_param[abs_param == 0].size
-        top_boundary = math.ceil(unpruned_boundary * percent)
-
-        # pruned_percent = pruned_amount/abs_param.size
-
-        # if 1 - pruned_percent < percent:
-        #     # pruned weights have occupied at least part of the overlapping checking region, all unpruned weights will be labeled as 1
-        #     mask_2d[np.where(abs_param != 0)] = 1
-        # else:
-
-        abs_param_1d_array = abs_param.flatten()
-            
-        percent_threshold = -np.sort(-abs_param_1d_array)[top_boundary]
-
-        # change top weights to 1
-        mask_2d[np.where(abs_param > percent_threshold)] = 1
-
-        # sanity check
-        # one_counts = (mask_2d == 1).sum()
-        # print(one_counts/param.size)
-
-        layer_to_mask[layer] = mask_2d
-        if keep_sign:
-            layer_to_mask[layer] *= np.sign(param)
-
-    # sanity check
-    # for layer in layer_to_mask:
-	#     print((layer_to_mask[layer] == 1).sum()/layer_to_mask[layer].size)
-
-    return layer_to_mask
-
-def generate_2d_top_magnitude_mask(model_path, percent, keep_sign = False):
+def generate_2d_top_magnitude_mask(model_path, percent, check_whole = False, keep_sign = False):
 
     """
         returns 2d top magnitude mask.
@@ -111,18 +65,11 @@ def generate_2d_top_magnitude_mask(model_path, percent, keep_sign = False):
         mask_2d = np.empty_like(abs_param)
         mask_2d[:] = 0 # initialize as 0
 
-        top_boundary = math.ceil(abs_param.size * percent)
-        
-        # pruned_percent = pruned_amount/abs_param.size
+        base_size = abs_param.size if check_whole else abs_param.size - abs_param[abs_param == 0].size
 
-        # if 1 - pruned_percent < percent:
-        #     # pruned weights have occupied at least part of the overlapping checking region, all unpruned weights will be labeled as 1
-        #     mask_2d[np.where(abs_param != 0)] = 1
-        # else:
-
-        abs_param_1d_array = abs_param.flatten()
-            
-        percent_threshold = -np.sort(-abs_param_1d_array)[top_boundary]
+        top_boundary = math.ceil(base_size * percent)
+                    
+        percent_threshold = -np.sort(-abs_param.flatten())[top_boundary]
 
         # change top weights to 1
         mask_2d[np.where(abs_param > percent_threshold)] = 1
@@ -145,7 +92,7 @@ def calculate_overlapping_mask(model_paths, check_whole, percent):
     layer_to_masks = []
 
     for model_path in model_paths:
-        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent, check_whole, keep_sign = False))
+        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent, check_whole))
 
     ref_layer_to_mask = layer_to_masks[0]
 
@@ -153,14 +100,15 @@ def calculate_overlapping_mask(model_paths, check_whole, percent):
         layer_to_mask = layer_to_masks[1:][layer_to_mask_iter]
         for layer, mask in layer_to_mask.items():
             ref_layer_to_mask[layer] *= mask
-            # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
-            print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
+            if check_whole:
+                # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
+                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
         print()
 
     return ref_layer_to_mask
 
 
-def calculate_top_overlapping_ratio(model_paths, percent):
+def calculate_top_overlapping_ratio(model_paths, percent, check_whole):
     """
     Args:
         model_paths - list of model paths
@@ -169,7 +117,7 @@ def calculate_top_overlapping_ratio(model_paths, percent):
 
     for model_path in model_paths:
         # layer_to_masks.append(generate_1d_top_magnitude_binary_mask(model_path, percent))
-        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent))
+        layer_to_masks.append(generate_2d_top_magnitude_mask(model_path, percent, check_whole))
 
     ref_layer_to_mask = layer_to_masks[0]
 
@@ -246,7 +194,7 @@ def get_num_total_model_params(model):
             total_num_model_params += params.numel()
     return total_num_model_params
 
-def global_vs_local_overlapping(log_folder, comm_round, percent):
+def global_vs_local_overlapping(log_folder, comm_round, percent, check_whole=False):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
@@ -271,7 +219,7 @@ def global_vs_local_overlapping(log_folder, comm_round, percent):
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, epoch_file_path], percent, check_whole)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
     
@@ -329,7 +277,7 @@ def global_vs_local_overlapping(log_folder, comm_round, percent):
 # global_vs_local_overlapping("/Users/chenhang/Documents/Temp/11282022_143103_SEED_50_NOISE_PERCENT_0.2_VAR_1.0", 1, percent)
 
 
-def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_epoch, percent, color_M=True):
+def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_epoch, percent, color_M=True, check_whole=False):
     """Plot overlapping ratios change through epochs between a client's last local model and other clients' intermediate and last local models.
        See 
         1. if common labels have more overlapping
@@ -359,7 +307,7 @@ def last_local_vs_locals_overlapping(log_folder, ref_client, comm_round, last_ep
         
         for epoch_file in model_files_this_round:
             epoch_file_path = f"{log_folder}/models_weights/{client}/{epoch_file}"
-            layer_to_ratio = calculate_top_overlapping_ratio([ref_local_model_path, epoch_file_path], percent)
+            layer_to_ratio = calculate_top_overlapping_ratio([ref_local_model_path, epoch_file_path], percent, check_whole)
             for layer, ratio in layer_to_ratio.items():
                 layer_to_clients_to_overlappings[layer][client].append(ratio)
 
@@ -459,12 +407,12 @@ def get_prune_params_with_layer_name(model, name='weight') -> List[Tuple[nn.Para
 
 def prune_by_top_overlap_l1(model, last_local_model_paths, check_whole, overlapping_threshold, prune_threshold):
 
-    top_mask = calculate_overlapping_mask(last_local_model_paths, check_whole, overlapping_threshold)
+    top_master_mask = calculate_overlapping_mask(last_local_model_paths, check_whole, overlapping_threshold)
     params_to_prune = get_prune_params_with_layer_name(model)
     layer_TO_if_pruned = {}
     layer_TO_pruned_percentage = {}
     for params, layer in params_to_prune:
-        layer_top_mask = top_mask[layer]
+        layer_top_mask = top_master_mask[layer]
         # calculate overlapping ratio
         overlapping_ratio = round((layer_top_mask == 1).sum()/torch.numel(params.weight), 3)
         # determine if prune
@@ -476,10 +424,12 @@ def prune_by_top_overlap_l1(model, last_local_model_paths, check_whole, overlapp
             prune.l1_unstructured(params, 'weight', new_pruned_percent)
             layer_TO_if_pruned[layer] = True
             layer_TO_pruned_percentage[layer] = new_pruned_percent
+            print(f"{layer} pruned {new_pruned_percent:.2%}")
         else:
             prune.l1_unstructured(params, 'weight', old_pruned_percent)
             layer_TO_if_pruned[layer] = False
             layer_TO_pruned_percentage[layer] = old_pruned_percent
+            print(f"{layer} skipeed pruning. Current pruned perc {old_pruned_percent:.2%}")
 
     return layer_TO_if_pruned, layer_TO_pruned_percentage
                 
@@ -545,7 +495,7 @@ def lowOverlappingPrune(module, layer_new_mask, dev_device, name='weight'):
 #     return module
 
 
-def global_vs_last_local_overlapping(log_folder, last_epoch, percent):
+def global_vs_last_local_overlapping(log_folder, last_epoch, percent, check_whole=False):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
@@ -572,7 +522,7 @@ def global_vs_last_local_overlapping(log_folder, last_epoch, percent):
         
         for client in clients:
             local_model_path = f"{log_folder}/models_weights/{client}/R{comm_round}_E{last_epoch}.pkl"
-            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, local_model_path], percent) # TODO - buggy when percent = 0.5
+            layer_to_ratio = calculate_top_overlapping_ratio([global_model_path, local_model_path], percent, check_whole) # TODO - buggy when percent = 0.5
             for layer, ratio in layer_to_ratio.items():
                 layer_TO_clients[layer][client].append(ratio)
 

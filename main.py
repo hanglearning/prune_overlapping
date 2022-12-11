@@ -95,6 +95,7 @@ if __name__ == "__main__":
     parser.add_argument('--noise_variance', type=float, default=1, help="noise variance of the Gaussian Noise by malicious clients")
     parser.add_argument('--noise_targeted_percent', type=float, default=0.5, help="percent of weights on TOP targeted positions to introduce noise, usually equal to overlapping_threshold. low positions will be calculated as 1 - noise_targeted_percent")
     parser.add_argument('--n_malicious', type=int, default=0, help="number of malicious nodes in the network")
+    parser.add_argument('--validate', type=int, default=1, help="enable validation")
 
     # for overlapping prune
     parser.add_argument('--deterministic_data_shards', type=int, default=0, help="to verify rewarding mechanism based on common labels")
@@ -137,7 +138,8 @@ if __name__ == "__main__":
     model_save_path = f"{args.log_dir}/models_weights/globals_0"
     Path(model_save_path).mkdir(parents=True, exist_ok=True)
     trainable_model_weights = get_trainable_model_weights(model)
-    with open(f"{model_save_path}/R0.pkl", 'wb') as f:
+    init_global_model_path = f"{model_save_path}/R0.pkl"
+    with open(init_global_model_path, 'wb') as f:
         pickle.dump(trainable_model_weights, f)
 
     train_loaders, test_loaders, user_labels, global_test_loader = DataLoaders(num_users=args.num_clients,
@@ -181,7 +183,7 @@ if __name__ == "__main__":
     wandb.config.update(args)
 
 
-    server = Server(args, model, clients, global_test_loader)
+    server = Server(args, model, init_global_model_path, clients, global_test_loader)
 
     for comm_round in range(1, args.rounds+1):
         server.update(comm_round)
