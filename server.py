@@ -177,7 +177,7 @@ class Server():
 
         # validation
         benigh_clients = client_idxs
-        if self.ages.validate:
+        if self.args.validate:
             benigh_clients = self.model_validation(idx_to_last_local_model_path)
         # evaluate validation
         false_positive = 0
