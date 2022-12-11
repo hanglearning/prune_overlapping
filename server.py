@@ -179,6 +179,13 @@ class Server():
         benigh_clients = client_idxs
         if self.ages.validate:
             benigh_clients = self.model_validation(idx_to_last_local_model_path)
+        # evaluate validation
+        false_positive = 0
+        for benigh_client in benigh_clients:
+            if self.clients[benigh_client - 1].is_malicious:
+                false_positive += 1
+        print(f"{false_positive} in {len(benigh_client)} out of {len(client_idxs)} is wrong. Error rate - {false_positive/len(client_idxs):.2%}")
+
         benigh_models = [idx_to_model[c] for c in benigh_clients]
         benigh_model_paths = [idx_to_model[c] for c in idx_to_last_local_model_path]
 
