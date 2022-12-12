@@ -174,9 +174,9 @@ class Server():
             if self.clients[benigh_client - 1].is_malicious:
                 false_positive += 1
 
-        error_rate = false_positive/len(benigh_clients)
-        print(f"{false_positive} in {len(benigh_clients)} out of {len(client_idxs)} is wrong. Error rate - {error_rate:.2%}")
-        wandb.log({f"error_rate": error_rate, "comm_round": comm_round})
+        correct_rate = 1 - false_positive/self.args.n_malicious
+        print(f"{false_positive} in {self.args.n_malicious} identified wrong. Correct rate - {correct_rate:.2%}")
+        wandb.log({f"correct_rate": correct_rate, "comm_round": comm_round})
 
         benigh_models = [idx_to_model[c] for c in benigh_clients]
         benigh_model_paths = [idx_to_last_local_model_path[c] for c in benigh_clients]
