@@ -330,6 +330,9 @@ class Client():
             self.poison_model(comm_round, self.args.noise_targeted_percent)
             poinsoned_acc = self.eval(self.model)["Accuracy"][0]
             print(f'Poisoned accuracy: {poinsoned_acc}, decreased {ticket_acc - poinsoned_acc}.')
+            self.save_model_weights_to_log(comm_round, self.args.epochs)
+            ticket_acc = poinsoned_acc
+
 
     def train(self, comm_round):
         """
