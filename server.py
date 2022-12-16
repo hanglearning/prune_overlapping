@@ -88,13 +88,13 @@ class Server():
         # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
         layer_to_ratios = {l:[] for l in layers} # in the order of client
         client_to_points = {}
-        client_to_layer_to_ratios = {c: {l: [] for l in layers} for c in idx_to_last_local_model_path.keys()}
+        # client_to_layer_to_ratios = {c: {l: [] for l in layers} for c in idx_to_last_local_model_path.keys()}
         for client_idx, local_model_path in idx_to_last_local_model_path.items():
             layer_to_mask = calculate_overlapping_mask([self.last_global_model_path, local_model_path], self.args.check_whole, self.args.overlapping_threshold)
             for layer, mask in layer_to_mask.items():
                 overlapping_ratio = round((mask == 1).sum()/mask.size, 3)
                 layer_to_ratios[layer].append(overlapping_ratio)
-                client_to_layer_to_ratios[client_idx][layer] = overlapping_ratio
+                # client_to_layer_to_ratios[client_idx][layer] = overlapping_ratio
             client_to_points[client_idx] = 0
 
         # group clients based on ratio
@@ -103,8 +103,8 @@ class Server():
             group_0 = []
             group_1 = []
             kmeans.fit(np.array(ratios).reshape(-1,1))
-            for client_iter in range(len(kmeans.labels_)):
-                label = kmeans.labels_[client_iter]
+            for client_iter in range(1, len(kmeans.labels_) + 1):
+                label = kmeans.labels_[client_iter - 1]
                 if label == 0:
                     group_0.append(client_iter)
                 else:
@@ -115,24 +115,16 @@ class Server():
             elif len(group_0) < len(group_1):
                 benigh_group = group_1
             else:
-                # when num of two groups are the same, pick the group having higher overall overlapping ratios
-                if len(group_0) == len(group_1):
-                    group_0_overall_ratios = 0
-                    for client_idx in group_0:
-                        for layer in layers:
-                            group_0_overall_ratios += client_to_layer_to_ratios[client_idx][layer]
-
-                    group_1_overall_ratios = 0
-                    for client_idx in group_1:
-                        for layer in layers:
-                            group_1_overall_ratios += client_to_layer_to_ratios[client_idx][layer]
+                # when num of two groups are the same, pick the group having higher total overlapping ratios
+                group_0_overall_ratios = sum([ratios[client_idx - 1] for client_idx in group_0])
+                group_1_overall_ratios = sum([ratios[client_idx - 1] for client_idx in group_1])
 
                 benigh_group = group_1 if group_1_overall_ratios > group_0_overall_ratios else group_0 # very rare when they equal 
 
             for client_iter in benigh_group:
-                client_to_points[client_iter + 1] += 1
+                client_to_points[client_iter] += 1
         
-        return [client_idx for client_idx in client_to_points if client_to_points[client_idx] >= num_layers * 0.5]
+        return [client_idx for client_idx in client_to_points if client_to_points[client_idx] > num_layers * 0.5] # was >=
 
     def update(
         self,
