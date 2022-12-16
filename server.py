@@ -175,6 +175,7 @@ class Server():
                 false_positive += 1
 
         correct_rate = 1 - false_positive/self.args.n_malicious
+        print(f"Identified benigh clients {benigh_clients}, total {len(benigh_clients)}.")
         print(f"{false_positive} in {self.args.n_malicious} identified wrong. Correct rate - {correct_rate:.2%}")
         wandb.log({f"correct_rate": correct_rate, "comm_round": comm_round})
 
