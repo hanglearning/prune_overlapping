@@ -39,8 +39,7 @@ def set_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)
 
-
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', help="mnist|cifar10",
                         type=str, default="mnist")
@@ -178,7 +177,7 @@ if __name__ == "__main__":
     # POLL, standalone_poll, standalone_cell, standalone_speed
 
     wandb.login()
-    wandb.init(project=args.wandb_project, entity=args.wandb_username)
+    wandb.init(mode="disabled", project=args.wandb_project, entity=args.wandb_username)
     wandb.run.name = f"{run_name}_samples_{args.n_samples}_n_clients_{args.num_clients}_n_classes_{args.n_class}_mali_{args.n_malicious}_targed_{args.noise_targeted_percent}_optim_{args.optimizer}_seed_{args.seed}_{args.run_note}_{exe_date_time}"
     wandb.config.update(args)
 
@@ -187,4 +186,7 @@ if __name__ == "__main__":
 
     for comm_round in range(1, args.rounds+1):
         server.update(comm_round)
+
+if __name__ == "__main__":
+    main()
 

@@ -60,13 +60,13 @@ class Client():
             percent: how much on the TOP positions to introduce noise
                     special case: when percent = 1, meaning whole network attack, the noise will ignore the mask sign. see "if percent != 1:"
         """
-
+        layer_to_mask = calc_mask_from_model_with_mask_object(self.model) # introduce noise to unpruned weights
         if percent == 1:
             # poisoning the whole network, the client introduces signed noise independent of mask sign.
             for layer, module in self.model.named_children():
                 for name, weight_params in module.named_parameters():
                     if "weight" in name:
-                        noise = self.args.noise_variance * torch.randn(weight_params.size())
+                        noise = self.args.noise_variance * torch.randn(weight_params.size()) * layer_to_mask[layer]
                         weight_params.add_(noise.to(self.args.device))
             print(f"Client {self.idx} poisoned the whole network with variance {self.args.noise_variance}.")
         else:
@@ -75,7 +75,7 @@ class Client():
             for layer, module in self.model.named_children():
                 for name, weight_params in module.named_parameters():
                     if "weight" in name:
-                        noise = self.args.noise_variance * torch.randn(weight_params.size())
+                        noise = self.args.noise_variance * torch.randn(weight_params.size()) * layer_to_mask[layer]
                         ''' increase magnitude for top positions '''
                         top_mask = layer_to_top_mask[layer]
                         signed_noise = abs(noise) * top_mask
@@ -86,7 +86,7 @@ class Client():
                         other_mask = 1 - top_mask
                         # need special dealing with noise to avoid adding magnitude
                         special_noise = np.minimum(abs(noise), abs(weight_params)) * other_mask * -1
-                        ori_weight_params = copy.deepcopy(weight_params)
+                        # ori_weight_params = copy.deepcopy(weight_params)
                         weight_params.add_(special_noise.to(self.args.device))
                         # sanity check
                         # print((np.array(abs(weight_params) < abs(ori_weight_params)).astype(int) == abs(other_mask)).sum() == other_mask.size)
