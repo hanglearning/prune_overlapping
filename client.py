@@ -66,7 +66,7 @@ class Client():
             for layer, module in self.model.named_children():
                 for name, weight_params in module.named_parameters():
                     if "weight" in name:
-                        noise = self.args.noise_variance * torch.randn(weight_params.size()) * layer_to_mask[layer]
+                        noise = self.args.noise_variance * torch.randn(weight_params.size()) * layer_to_mask[layer].to(self.args.device)
                         weight_params.add_(noise.to(self.args.device))
             print(f"Client {self.idx} poisoned the whole network with variance {self.args.noise_variance}.")
         else:

@@ -112,6 +112,7 @@ def calculate_top_overlapping_ratio(model_paths, percent, check_whole):
     """
     Args:
         model_paths - list of model paths
+    Note - the ratio is based on the top percent area, rather than whole network.
     """
     layer_to_masks = []
 
