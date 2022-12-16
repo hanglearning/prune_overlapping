@@ -40,7 +40,7 @@ def check_sparsity_based_on_mask(model):
             if 'mask' in name:
                 print(f"{layer} sparsity - {(mask == 1).sum()/torch.numel(mask)}")
 
-def generate_2d_top_magnitude_mask(model_path, percent, check_whole = False, keep_sign = False):
+def generate_2d_top_magnitude_mask(model_path, percent, check_whole = False, keep_sign = False, pruning_two = True):
 
     """
         returns 2d top magnitude mask.
@@ -50,6 +50,10 @@ def generate_2d_top_magnitude_mask(model_path, percent, check_whole = False, kee
         2. keep_sign == False
             calculate absolute magitude mask. Used in calculating weight overlapping.
             returns binary mask with 1, 0.
+        
+        *. pruning_two: this is useful for the function calculate_top_overlapping_ratio(). When pruning_two = True, it returns 1 as top percent, 2 as pruned positions and 0 as otherwise. This is used in calculate_top_overlapping_ratio() to consider pruned weights when we calculate the top_overlapping_ratio.
+        
+        For example, if the validation area is top 50% and the network reaches its target sparsity 20%, if we set pruning_two = False, calculate_top_overlapping_ratio() returns 40%. If we set pruning_two = True, calculate_top_overlapping_ratio() returns 100%. 
     """
     
     layer_to_mask = {}
@@ -209,7 +213,7 @@ def global_vs_local_overlapping_by_round(log_folder, comm_round, percent, check_
     clients.sort(key=lambda x: int(x.split('_')[-1]))
     clients.remove("globals_0")
 
-    layer_to_clients_to_overlappings = {k: {c: [] for c in clients} for k in layers}
+    layer_to_clients_to_overlappings = {l: {c: [] for c in clients} for l in layers}
 
     client_to_xticks = {}
     for client in clients:
