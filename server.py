@@ -78,10 +78,10 @@ class Server():
         Returns:
             list: a list of client idxes identified as legitimate clients
         """
-        if self.args.CELL:
-            converging_ratio = 1 - self.args.prune_threshold
-        if self.args.overlapping_prune:
-            converging_ratio = (1 - self.args.prune_threshold)/self.args.overlapping_threshold
+        # if self.args.CELL:
+        #     converging_ratio = 1 - self.args.prune_threshold
+        # if self.args.overlapping_prune:
+        #     converging_ratio = (1 - self.args.prune_threshold)/self.args.overlapping_threshold
 
         # get layers
         with open(self.last_global_model_path, 'rb') as f:
@@ -224,20 +224,22 @@ class Server():
         aggr_model = self.aggr(benigh_models, clients)
 
         # test UNpruned global model on entire test set
-        global_test_acc = util_test(aggr_model,
-                               self.global_test_loader,
-                               self.args.device,
-                               self.args.test_verbose)['Accuracy'][0]
-        print('-----------------------------', flush=True)
-        print(f'| Un-pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
-        print('-----------------------------', flush=True)
-        wandb.log({"unpruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
+        if False:
+            global_test_acc = util_test(aggr_model,
+                                self.global_test_loader,
+                                self.args.device,
+                                self.args.test_verbose)['Accuracy'][0]
+            print('-----------------------------', flush=True)
+            print(f'| Un-pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
+            print('-----------------------------', flush=True)
+            wandb.log({"unpruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
 
          # test UNpruned global model on each local test set
-        for client in self.clients:
-            global_model_local_set_acc = client.eval(aggr_model)["Accuracy"][0]
-            print(f"Un-pruned Global Model on Client {client.idx} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
-            wandb.log({f"{client.idx}_unpruned_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
+        if False:
+            for client in self.clients:
+                global_model_local_set_acc = client.eval(aggr_model)["Accuracy"][0]
+                print(f"Un-pruned Global Model on Client {client.idx} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
+                wandb.log({f"{client.idx}_unpruned_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
 
         layer_TO_if_pruned = [False]
         if self.args.overlapping_prune:
@@ -263,20 +265,21 @@ class Server():
                 pickle.dump(trainable_model_weights, f)
 
         # test PRUNED global model on entire test set
-        global_test_acc = util_test(self.model,
-                               self.global_test_loader,
-                               self.args.device,
-                               self.args.test_verbose)['Accuracy'][0]
-        print('-----------------------------', flush=True)
-        print(f'| Pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
-        print('-----------------------------', flush=True)
-        wandb.log({"pruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
-
-        # test PRUNED global model on each local test set
-        for client in self.clients:
-            global_model_local_set_acc = client.eval(self.model)["Accuracy"][0]
-            print(f"Pruned Global Model on Client {client.idx} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
-            wandb.log({f"{client.idx}_pruned_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
+        if False:
+            global_test_acc = util_test(self.model,
+                                self.global_test_loader,
+                                self.args.device,
+                                self.args.test_verbose)['Accuracy'][0]
+            print('-----------------------------', flush=True)
+            print(f'| Pruned Global Model on Global Test Set Accuracy at Round {comm_round} : {global_test_acc}  | ', flush=True)
+            print('-----------------------------', flush=True)
+            wandb.log({"pruned_global_model_global_acc": global_test_acc, "comm_round": comm_round})
+        if False:
+            # test PRUNED global model on each local test set
+            for client in self.clients:
+                global_model_local_set_acc = client.eval(self.model)["Accuracy"][0]
+                print(f"Pruned Global Model on Client {client.idx} Local Test Set Accuracy at Round {comm_round} : {global_model_local_set_acc}")
+                wandb.log({f"{client.idx}_pruned_global_model_local_acc": global_model_local_set_acc, "comm_round": comm_round})
 
         # log global model prune percentage
         if self.args.CELL:
