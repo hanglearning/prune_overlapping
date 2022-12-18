@@ -192,8 +192,10 @@ class Server():
         for benigh_client in identified_benigh_clients:
             if self.clients[benigh_client - 1].is_malicious:
                 false_positive += 1
-
-        correct_rate = 1 - false_positive/self.args.n_malicious
+        try:
+            correct_rate = 1 - false_positive/self.args.n_malicious
+        except ZeroDivisionError:
+            correct_rate = 1
         print(f"Identified benigh clients {identified_benigh_clients}, total {len(identified_benigh_clients)}.")
         print(f"{false_positive} in {self.args.n_malicious} identified wrong. Correct rate - {correct_rate:.2%}")
         wandb.log({f"correct_rate": correct_rate, "comm_round": comm_round})
