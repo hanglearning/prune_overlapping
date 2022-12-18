@@ -30,7 +30,7 @@
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--CELL", "1", "--overlapping_threshold", "0.2", "--check_whole", "1", "--n_malicious", "4", "--noise_variance", "1", "--noise_targeted_percent", "1", "--num_clients", "12", "--epochs", "5", "--seed", "40", "--wandb_username", "hangchen", "--wandb_project", "Overlapping_Prune_1", "--rounds", "30", "--validate", "1", "--log_dir", "/Users/chenhang/Documents/Temp"]
+            "args": ["--CELL", "1", "--overlapping_threshold", "0.2", "--check_whole", "1", "--n_malicious", "4", "--noise_variance", "1", "--noise_targeted_percent", "1", "--num_clients", "12", "--epochs", "5", "--seed", "40", "--wandb_username", "hangchen", "--wandb_project", "dummy", "--rounds", "30", "--validate", "1", "--log_dir", "/Users/chenhang/Documents/Temp"]
         },
         // {
         //     "name": "main.py - CELL",

@@ -78,6 +78,10 @@ class Server():
         Returns:
             list: a list of client idxes identified as legitimate clients
         """
+        if self.args.CELL:
+            converging_ratio = 1 - self.args.prune_threshold
+        if self.args.overlapping_prune:
+            converging_ratio = (1 - self.args.prune_threshold)/self.args.overlapping_threshold
 
         # get layers
         with open(self.last_global_model_path, 'rb') as f:
@@ -92,7 +96,8 @@ class Server():
         for client_idx, local_model_path in idx_to_last_local_model_path.items():
             layer_to_mask = calculate_overlapping_mask([self.last_global_model_path, local_model_path], self.args.check_whole, self.args.overlapping_threshold)
             for layer, mask in layer_to_mask.items():
-                overlapping_ratio = round((mask == 1).sum()/mask.size, 3)
+                # overlapping_ratio = round((mask == 1).sum()/mask.size, 3)
+                overlapping_ratio = (mask == 1).sum()/mask.size
                 layer_to_ratios[layer].append(overlapping_ratio)
                 # client_to_layer_to_ratios[client_idx][layer] = overlapping_ratio
             client_to_points[client_idx] = 0
@@ -178,22 +183,23 @@ class Server():
         idx_to_model, idx_to_acc, idx_to_last_local_model_path = self.download(clients)
 
         # validation
-        benigh_clients = [self.clients[i].idx for i in client_idxs]
+        identified_benigh_clients = [self.clients[i].idx for i in client_idxs]
         if self.args.validate:
-            benigh_clients = self.model_validation(idx_to_last_local_model_path)
+            identified_benigh_clients = self.model_validation(idx_to_last_local_model_path)
+        benigh_clients = [self.clients[i].idx for i in client_idxs if not self.clients[i].is_malicious]
         # evaluate validation
         false_positive = 0
-        for benigh_client in benigh_clients:
+        for benigh_client in identified_benigh_clients:
             if self.clients[benigh_client - 1].is_malicious:
                 false_positive += 1
 
         correct_rate = 1 - false_positive/self.args.n_malicious
-        print(f"Identified benigh clients {benigh_clients}, total {len(benigh_clients)}.")
+        print(f"Identified benigh clients {identified_benigh_clients}, total {len(identified_benigh_clients)}.")
         print(f"{false_positive} in {self.args.n_malicious} identified wrong. Correct rate - {correct_rate:.2%}")
         wandb.log({f"correct_rate": correct_rate, "comm_round": comm_round})
 
-        benigh_models = [idx_to_model[c] for c in benigh_clients]
-        benigh_model_paths = [idx_to_last_local_model_path[c] for c in benigh_clients]
+        benigh_models = [idx_to_model[c] for c in identified_benigh_clients]
+        benigh_model_paths = [idx_to_last_local_model_path[c] for c in identified_benigh_clients]
 
         # log acc
         if self.args.CELL or self.args.overlapping_prune:
@@ -201,12 +207,15 @@ class Server():
         if self.args.fedavg_no_prune:
             model_type = "local"
 
+        iden_benigh_acc = [idx_to_acc[c] for c in identified_benigh_clients]
         benigh_acc = [idx_to_acc[c] for c in benigh_clients]
+        iden_benigh_avg_accuracy = np.mean(iden_benigh_acc, axis=0, dtype=np.float32)
         benigh_avg_accuracy = np.mean(benigh_acc, axis=0, dtype=np.float32)
         all_avg_accuracy = np.mean(list(idx_to_acc.values()), axis=0, dtype=np.float32)
         print('-----------------------------', flush=True)
         print(f'| Benigh Average {model_type.title()} Model Accuracy on Local Test Sets: {benigh_avg_accuracy}  | ', flush=True)
         print('-----------------------------', flush=True)
+        wandb.log({f"iden_benigh_avg_{model_type}_model_local_acc": iden_benigh_avg_accuracy, "comm_round": comm_round})
         wandb.log({f"benigh_avg_{model_type}_model_local_acc": benigh_avg_accuracy, "comm_round": comm_round})
         wandb.log({f"all_avg_{model_type}_model_local_acc": all_avg_accuracy, "comm_round": comm_round})
 

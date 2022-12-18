@@ -255,11 +255,11 @@ def global_vs_local_overlapping_by_round(log_folder, comm_round, percent, check_
 # for i in range(1, 31):
 #     global_vs_local_overlapping_by_round("/Users/chenhang/Downloads/CELL/12142022_213858_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", i, 0.2, True)
 
-def global_vs_local_overlapping_all_rounds(log_folder, percent, check_whole=False):
+def global_vs_local_overlapping_all_rounds(log_folder, percent, last_epoch = None, end_round = None, check_whole=False):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
-    total_rounds = len([f for f in os.listdir(f"{log_folder}/models_weights/globals_0")])
+    total_rounds = end_round if end_round else len([f for f in os.listdir(f"{log_folder}/models_weights/globals_0")])
     init_model_path = f"{log_folder}/models_weights/globals_0/R0.pkl"
     # get layers
     with open(init_model_path, 'rb') as f:
@@ -273,6 +273,7 @@ def global_vs_local_overlapping_all_rounds(log_folder, percent, check_whole=Fals
 
     layer_to_clients_to_overlappings = {k: {c: [] for c in clients} for k in layers}
     client_to_xticks = {c: [] for c in clients}
+
     
     for comm_round in range(1, total_rounds + 1):
         global_model_path = f"{log_folder}/models_weights/globals_0/R{comm_round - 1}.pkl"
@@ -289,8 +290,8 @@ def global_vs_local_overlapping_all_rounds(log_folder, percent, check_whole=Fals
                 for layer, ratio in layer_to_ratio.items():
                     layer_to_clients_to_overlappings[layer][client].append(ratio)
 
-    plt.figure(dpi=250) # TODO
     for layer, clients_to_overlappings in layer_to_clients_to_overlappings.items():
+        plt.figure(dpi=250, figsize=(3 * total_rounds, 3))
         for client, overlappings in clients_to_overlappings.items():
             plot_y = [percentage * 100 for percentage in overlappings] # used to format percentage
             # plt.plot(client_to_xticks[client], plot_y, color=colors[iter - 1])
@@ -302,6 +303,9 @@ def global_vs_local_overlapping_all_rounds(log_folder, percent, check_whole=Fals
             # plt.annotate(client, xy=(iter % len(client_to_xticks[client]), plot_y[iter % len(plot_y)]), size=8, color=colors[iter - 1])
             # plt.annotate(client, xy=(len(overlappings) - iter * 0.8, overlappings[iter % len(overlappings)]), size=6, color=colors[iter - 1])
 
+        for v_line_x_axis in client_to_xticks[client][last_epoch-1::last_epoch]:
+            plt.axvline(v_line_x_axis, color = 'b', ls='--', lw=2,)
+
         patch_L = mpatches.Patch(color='green', label=f'Legitimate')
         patch_M = mpatches.Patch(color='red', label=f'Malicious')
 
@@ -309,7 +313,7 @@ def global_vs_local_overlapping_all_rounds(log_folder, percent, check_whole=Fals
 
         plt.xlabel('Epoch')
         plt.ylabel('Overlapping Ratio')
-        plt.title(f"Global R{comm_round - 1} vs. Local R{comm_round} - {layer}")
+        plt.title(f"Top {percent:.0%} Overlapping Ratio - {layer}")
 
         plot_save_folder = f"{log_folder}/plots/global_vs_local"
         os.makedirs(plot_save_folder, exist_ok=True)
@@ -454,12 +458,12 @@ def prune_by_top_overlap_l1(model, last_local_model_paths, check_whole, overlapp
     for params, layer in params_to_prune:
         layer_top_mask = top_master_mask[layer]
         # calculate overlapping ratio
-        overlapping_ratio = round((layer_top_mask == 1).sum()/torch.numel(params.weight), 3)
+        overlapping_ratio = (layer_top_mask == 1).sum()/torch.numel(params.weight)
         # determine if prune
-        old_pruned_percent = round(float((params.weight == 0).sum()/torch.numel(params.weight)), 3)
+        old_pruned_percent = float((params.weight == 0).sum()/torch.numel(params.weight))
         print(f"old_pruned_percent - {layer}", old_pruned_percent)
         print(f"overlapping_ratio towards the whole layer - {layer}", overlapping_ratio)
-        if old_pruned_percent < prune_threshold:
+        if round(old_pruned_percent, 3) < round(prune_threshold, 3):
             new_pruned_percent = min(old_pruned_percent + overlapping_ratio, prune_threshold)
             prune.l1_unstructured(params, 'weight', new_pruned_percent)
             layer_TO_if_pruned[layer] = True
@@ -543,7 +547,7 @@ def lowOverlappingPrune(module, layer_new_mask, dev_device, name='weight'):
 #     return module
 
 
-def global_vs_last_local_overlapping(log_folder, last_epoch, percent, check_whole=False):
+def global_vs_last_local_overlapping(log_folder, last_epoch, percent, check_whole=True):
     """Plot overlapping ratios change through epochs between global model and intermediate local models
         # rep_device - used as the baseline to determine common labels color
     """
@@ -589,7 +593,7 @@ def global_vs_last_local_overlapping(log_folder, last_epoch, percent, check_whol
 
         plt.xlabel('Comm Round')
         plt.ylabel('Overlapping Ratio')
-        plt.title(f"Global R{comm_round - 1} vs. Local E{last_epoch} - {layer}")
+        plt.title(f"Top {percent:.0%} Overlapping Ratio - {layer}")
 
         plot_save_folder = f"{log_folder}/plots/global_local_overlappings/"
         os.makedirs(plot_save_folder, exist_ok=True)
@@ -601,4 +605,5 @@ def global_vs_last_local_overlapping(log_folder, last_epoch, percent, check_whol
 
 if __name__ == "__main__":
     # global_vs_local_overlapping_all_rounds("/Users/chenhang/Downloads/CELL/12142022_213858_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", 0.2, True)
-    global_vs_local_overlapping_by_round("/Users/chenhang/Downloads/CELL/12142022_213858_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", 28, 0.5, True)
+    global_vs_local_overlapping_all_rounds("/Users/chenhang/Downloads/CELL/12162022_212035_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", 0.2, 5, None, True)
+    # global_vs_last_local_overlapping("/Users/chenhang/Downloads/CELL/12162022_212035_SEED_40_NOISE_PERCENT_1.0_VAR_1.0", 5, 0.2)
