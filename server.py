@@ -85,21 +85,27 @@ class Server():
             layer_to_weights = pickle.load(f)
         layers = list(layer_to_weights.keys())
 
+        layer_to_pruned_perc = {}
         if self.args.overlapping_prune:
             layers = []
             # skip layer that converges
             for layer, weights in layer_to_weights.items():
-                current_unpruned_ratio = weights[weights!=0].size/weights.size
-                if round((1 - self.args.prune_threshold), 3) != round(current_unpruned_ratio, 3):
-                    layers.append(layer)
-                else:
-                    # debug
+                current_pruned_perc = weights[weights==0].size/weights.size
+                layer_to_pruned_perc[layer] = current_pruned_perc
+                if round(current_pruned_perc, 3) > round((1 - self.args.overlapping_threshold), 3):
+                    # debug, layer converged
                     continue
+                else:
+                    layers.append(layer)
 
         num_layers = len(layers)
 
+        if round(np.mean(list(layer_to_pruned_perc.values())),3) == self.args.prune_threshold:
+            sys.exit("Model converges.")
+
         if num_layers == 0:
-            sys.exit(f"Model converged to sparsity - {1 - self.args.prune_threshold}")
+            print(f"Model converged to checking area.")
+            return self.last_round_iden_benighs # in blockchain app, can return by stake
 
         # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
         layer_to_ratios = {l:[] for l in layers} # in the order of client
@@ -119,26 +125,21 @@ class Server():
         # group clients based on ratio
         kmeans = KMeans(n_clusters=2, random_state=0) 
         for layer, ratios in layer_to_ratios.items():
-            group_0 = []
-            group_1 = []
-            kmeans.fit(np.array(ratios).reshape(-1,1))
-            for client_iter in range(1, len(kmeans.labels_) + 1):
-                label = kmeans.labels_[client_iter - 1]
-                if label == 0:
-                    group_0.append(client_iter)
-                else:
-                    group_1.append(client_iter)
             
-            if len(group_0) > len(group_1):
-                benigh_group = group_0
-            elif len(group_0) < len(group_1):
-                benigh_group = group_1
-            else:
-                # when num of two groups are the same, pick the group having higher total overlapping ratios
-                group_0_overall_ratios = sum([ratios[client_idx - 1] for client_idx in group_0])
-                group_1_overall_ratios = sum([ratios[client_idx - 1] for client_idx in group_1])
+            kmeans.fit(np.array(ratios).reshape(-1,1))
+            labels = list(kmeans.labels_)
+                   
+            center0 = kmeans.cluster_centers_[0]
+            center1 = kmeans.cluster_centers_[1]
 
-                benigh_group = group_1 if group_1_overall_ratios > group_0_overall_ratios else group_0 # very rare when they equal 
+            benigh_center_group = 0
+            if center0 < center1:
+                benigh_center_group = 1
+
+            benigh_group = []
+            for client_iter in range(1, len(labels) + 1):
+                if labels[client_iter - 1] == benigh_center_group:
+                    benigh_group.append(client_iter)
 
             for client_iter in benigh_group:
                 client_to_points[client_iter] += 1
@@ -200,6 +201,7 @@ class Server():
         identified_benigh_clients = [self.clients[i].idx for i in client_idxs]
         if self.args.validate:
             identified_benigh_clients = self.model_validation(idx_to_last_local_model_path)
+            self.last_round_iden_benighs = identified_benigh_clients
         benigh_clients = [self.clients[i].idx for i in client_idxs if not self.clients[i].is_malicious]
         # evaluate validation
         false_positive = 0
