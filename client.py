@@ -106,7 +106,7 @@ class Client():
         except:
             layer_to_mask = calc_mask_from_model_without_mask_object(self.model)
         for layer in trainable_model_weights:
-            trainable_model_weights[layer] = trainable_model_weights[layer].cpu() * np.array(layer_to_mask[layer])
+            trainable_model_weights[layer] *= np.array(layer_to_mask[layer].cpu())
         # save the current (last) local model weights path
         self.last_local_model_path = f"{model_save_path}/R{comm_round}_E{epoch}.pkl"
         with open(self.last_local_model_path, 'wb') as f:

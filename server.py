@@ -284,7 +284,7 @@ class Server():
             except:
                 layer_to_mask = calc_mask_from_model_without_mask_object(self.model)
             for layer in trainable_model_weights:
-                trainable_model_weights[layer] = trainable_model_weights[layer].cpu() * np.array(layer_to_mask[layer])
+                trainable_model_weights[layer] *= np.array(layer_to_mask[layer].cpu())
             with open(self.last_global_model_path, 'wb') as f:
                 pickle.dump(trainable_model_weights, f)
 
