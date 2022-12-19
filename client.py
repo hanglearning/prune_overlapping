@@ -318,7 +318,6 @@ class Client():
 
         ticket_acc = self.eval(self.model)["Accuracy"][0]
         print(f'Trained model accuracy: {ticket_acc}')
-        wandb.log({f"{self.idx}_ticket_local_acc": ticket_acc, "comm_round": comm_round})
 
         wandb.log({f"{self.idx}_cur_prune_rate": self.cur_prune_rate}) # client's prune rate, but not necessarily the same as _percent_pruned because when < validation_threshold, no prune and use the whole model
         # wandb.log({f"{self.idx}_eita": self.eita}) - I don't care logging it
@@ -333,6 +332,7 @@ class Client():
             self.save_model_weights_to_log(comm_round, self.args.epochs)
             ticket_acc = poinsoned_acc
 
+        wandb.log({f"{self.idx}_ticket_local_acc": ticket_acc, "comm_round": comm_round})
 
     def train(self, comm_round):
         """
