@@ -101,6 +101,12 @@ class Client():
         model_save_path = f"{self.args.log_dir}/models_weights/{L_or_M}_{self.user_labels}_{self.idx}"
         Path(model_save_path).mkdir(parents=True, exist_ok=True)
         trainable_model_weights = get_trainable_model_weights(self.model)
+        try:
+            layer_to_mask = calc_mask_from_model_with_mask_object(self.model)
+        except:
+            layer_to_mask = calc_mask_from_model_without_mask_object(self.model)
+        for layer in trainable_model_weights:
+            trainable_model_weights[layer] *= np.array(layer_to_mask[layer])
         # save the current (last) local model weights path
         self.last_local_model_path = f"{model_save_path}/R{comm_round}_E{epoch}.pkl"
         with open(self.last_local_model_path, 'wb') as f:

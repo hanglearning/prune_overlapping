@@ -78,24 +78,38 @@ class Server():
         Returns:
             list: a list of client idxes identified as legitimate clients
         """
-        # if self.args.CELL:
-        #     converging_ratio = 1 - self.args.prune_threshold
-        # if self.args.overlapping_prune:
-        #     converging_ratio = (1 - self.args.prune_threshold)/self.args.overlapping_threshold
+        
 
         # get layers
         with open(self.last_global_model_path, 'rb') as f:
             layer_to_weights = pickle.load(f)
         layers = list(layer_to_weights.keys())
+
+        if self.args.overlapping_prune:
+            layers = []
+            # skip layer that converges
+            for layer, weights in layer_to_weights.items():
+                current_unpruned_ratio = weights[weights!=0].size/weights.size
+                if round((1 - self.args.prune_threshold), 3) != round(current_unpruned_ratio, 3):
+                    layers.append(layer)
+                else:
+                    # debug
+                    continue
+
         num_layers = len(layers)
+
+        if num_layers == 0:
+            sys.exit(f"Model converged to sparsity - {1 - self.args.prune_threshold}")
 
         # 2 groups of models and treat the majority group as legitimate (following the legitimate direction)
         layer_to_ratios = {l:[] for l in layers} # in the order of client
         client_to_points = {}
         # client_to_layer_to_ratios = {c: {l: [] for l in layers} for c in idx_to_last_local_model_path.keys()}
         for client_idx, local_model_path in idx_to_last_local_model_path.items():
-            layer_to_mask = calculate_overlapping_mask([self.last_global_model_path, local_model_path], self.args.check_whole, self.args.overlapping_threshold)
+            layer_to_mask = calculate_overlapping_mask([self.last_global_model_path, local_model_path], self.args.check_whole, self.args.overlapping_threshold, model_validation = True)
             for layer, mask in layer_to_mask.items():
+                if layer not in layers:
+                    continue
                 # overlapping_ratio = round((mask == 1).sum()/mask.size, 3)
                 overlapping_ratio = (mask == 1).sum()/mask.size
                 layer_to_ratios[layer].append(overlapping_ratio)
@@ -263,6 +277,12 @@ class Server():
             model_save_path = f"{self.args.log_dir}/models_weights/globals_0"
             trainable_model_weights = get_trainable_model_weights(self.model)
             self.last_global_model_path = f"{model_save_path}/R{comm_round}.pkl"
+            try:
+                layer_to_mask = calc_mask_from_model_with_mask_object(self.model)
+            except:
+                layer_to_mask = calc_mask_from_model_without_mask_object(self.model)
+            for layer in trainable_model_weights:
+                trainable_model_weights[layer] *= np.array(layer_to_mask[layer])
             with open(self.last_global_model_path, 'wb') as f:
                 pickle.dump(trainable_model_weights, f)
 

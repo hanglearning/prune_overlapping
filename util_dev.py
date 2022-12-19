@@ -28,6 +28,7 @@ def get_trainable_model_weights(model):
     Returns:
         layer_to_param _dict_: you know!
     """
+        
     layer_to_param = {} 
     for layer_name, param in model.named_parameters():
         if 'weight' in layer_name:
@@ -88,7 +89,7 @@ def generate_2d_top_magnitude_mask(model_path, percent, check_whole = False, kee
 
     return layer_to_mask
 
-def calculate_overlapping_mask(model_paths, check_whole, percent):
+def calculate_overlapping_mask(model_paths, check_whole, percent, model_validation=False):
     layer_to_masks = []
 
     for model_path in model_paths:
@@ -102,7 +103,10 @@ def calculate_overlapping_mask(model_paths, check_whole, percent):
             ref_layer_to_mask[layer] *= mask
             if check_whole:
                 # for debug - when each local model has high overlapping with the last global model, why the overlapping ratio for all local models seems to be low?
-                print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
+                if model_validation: # called by model_validation()
+                    print(f"Client {model_paths[-1].split('/')[-2]}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
+                else:
+                    print(f"iter {layer_to_mask_iter + 1}, layer {layer} - overlapping ratio on top {percent:.2%} is {(ref_layer_to_mask[layer] == 1).sum()/ref_layer_to_mask[layer].size/percent:.2%}")
         print()
 
     return ref_layer_to_mask
